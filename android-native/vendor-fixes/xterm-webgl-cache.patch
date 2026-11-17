@@ -1,0 +1,103 @@
+--- a/addons/addon-webgl/src/TextureAtlas.ts
++++ b/addons/addon-webgl/src/TextureAtlas.ts
+@@ -136,12 +136,26 @@
+   }
+ 
+   public clearTexture(): void {
+-    if (this._pages[0].currentRow.x === 0 && this._pages[0].currentRow.y === 0) {
++    if (!this._pages.some(page => page.currentRow.x !== 0 || page.currentRow.y !== 0)) {
+       return;
+     }
+-    for (const page of this._pages) {
+-      page.clear();
+-    }
++    const first = this._pages[0];
++    // Public clearTextureAtlas also clears the render model between frames.
++    // Drop unused backing stores instead of retaining every merged page.
++    for (const page of this._pages.slice(1)) {
++      this._onRemoveTextureAtlasCanvas.fire(page.canvas);
++      page.canvas.width = 0;
++      page.canvas.height = 0;
++      page.canvas.remove();
++    }
++    this._pages.length = 1;
++    if (first.canvas.width !== this._textureSize) {
++      first.canvas.width = this._textureSize;
++      first.canvas.height = this._textureSize;
++    }
++    first.clear();
++    this._activePages = [first];
++    this._overflowSizePage = undefined;
+     this._cacheMap.clear();
+     this._cacheMapCombined.clear();
+     this._didWarmUp = false;
+@@ -263,10 +277,15 @@
+     restrictToCellHeight: boolean,
+     domContainer: HTMLElement | undefined
+   ): IRasterizedGlyph {
+-    $glyph = cacheMap.get(key, bg, fg, ext);
++    // Transparent glyphs do not depend on the background RGB unless inverted
++    // or contrast correction is enabled. Preserve all other style bits.
++    const cacheBg = this._config.allowTransparency &&
++      this._config.minimumContrastRatio === 1 && !(fg & 0x4000000)
++      ? bg & ~0x3ffffff : bg;
++    $glyph = cacheMap.get(key, cacheBg, fg, ext);
+     if (!$glyph) {
+       $glyph = this._drawToCache(key, bg, fg, ext, restrictToCellHeight, domContainer);
+-      cacheMap.set(key, bg, fg, ext, $glyph);
++      cacheMap.set(key, cacheBg, fg, ext, $glyph);
+     }
+     return $glyph;
+   }
+@@ -1071,6 +1090,8 @@
+     this.currentRow.y = 0;
+     this.currentRow.height = 0;
+     this.fixedRows.length = 0;
++    this._glyphs.length = 0;
++    this._usedPixels = 0;
+     this.version++;
+   }
+ }
+--- a/addons/addon-webgl/src/GlyphRenderer.ts
++++ b/addons/addon-webgl/src/GlyphRenderer.ts
+@@ -94,7 +94,7 @@
+   private readonly _projectionLocation: WebGLUniformLocation;
+   private readonly _resolutionLocation: WebGLUniformLocation;
+   private readonly _textureLocation: WebGLUniformLocation;
+-  private readonly _atlasTextures: GLTexture[];
++  private readonly _atlasTextures: (GLTexture & { canvas?: HTMLCanvasElement })[];
+   private readonly _attributesBuffer: WebGLBuffer;
+ 
+   private _atlas: ITextureAtlas | undefined;
+@@ -358,8 +358,22 @@
+ 
+     // Bind the atlas page texture if they have changed
+     for (let i = 0; i < this._atlas.pages.length; i++) {
+-      if (this._atlas.pages[i].version !== this._atlasTextures[i].version) {
++      if (this._atlas.pages[i].version !== this._atlasTextures[i].version ||
++          this._atlas.pages[i].canvas !== this._atlasTextures[i].canvas) {
+         this._bindAtlasPageTexture(gl, this._atlas, i);
++      }
++    }
++
++    // Release GPU storage for slots removed by cache maintenance.
++    for (let i = this._atlas.pages.length; i < this._atlasTextures.length; i++) {
++      const texture = this._atlasTextures[i];
++      if (texture.canvas) {
++        gl.activeTexture(gl.TEXTURE0 + i);
++        gl.bindTexture(gl.TEXTURE_2D, texture.texture);
++        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
++        gl.generateMipmap(gl.TEXTURE_2D);
++        texture.version = -1;
++        texture.canvas = undefined;
+       }
+     }
+ 
+@@ -382,6 +396,7 @@
+     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas.pages[i].canvas);
+     gl.generateMipmap(gl.TEXTURE_2D);
+     this._atlasTextures[i].version = atlas.pages[i].version;
++    this._atlasTextures[i].canvas = atlas.pages[i].canvas;
+   }
+ 
+   public setDimensions(dimensions: IRenderDimensions): void {

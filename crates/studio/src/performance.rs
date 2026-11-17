@@ -173,6 +173,7 @@ impl Performance {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     pub(super) fn enabled(&self) -> bool {
         self.enabled
     }

@@ -66,11 +66,9 @@ getrandom = { version = "0.4", optional = true }
 url = "2.5.8"
 # The detached video window's surface: winit opens the desktop window and
 # softbuffer presents the frame, both pure Rust and neither a GPU stack.
-winit = { version = "0.30", optional = true }
-softbuffer = { version = "0.4", optional = true }
 # The terminal studio is intentionally a Rust-only surface. Ratatui shares the
 # exact Crossterm 0.29 event types used for enhanced-keyboard negotiation.
-arboard = { version = "3.6", default-features = false }
+
 crossterm = "0.29"
 # zlib for the kitty graphics protocol: a frame of pixels is a few hundred
 # kilobytes raw and a few tens compressed, forty times a second.
@@ -124,3 +122,12 @@ rustel-mini = { path = "../mini" }
 
 [lints]
 workspace = true
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+arboard = { version = "3.6", default-features = false }
+winit = { version = "0.30", optional = true }
+softbuffer = { version = "0.4", optional = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk-context = "0.1"

@@ -14,10 +14,13 @@ use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use image::{ImageReader, Limits};
+#[cfg(any(not(target_os = "android"), test))]
 use oximedia_capture::{
     BackendKind, CaptureConfig, CaptureEncoding, CaptureFormat, DeviceSelector,
 };
+#[cfg(any(not(target_os = "android"), feature = "video", test))]
 use oximedia_codec::{MatrixCoefficients, Plane, VideoFrame};
+#[cfg(any(not(target_os = "android"), feature = "video", test))]
 use oximedia_core::PixelFormat;
 use rustel_hydra::{HYDRA_SOURCE_SLOTS, HydraEvent, HydraInputLease, HydraInputSink, HydraSource};
 
@@ -37,16 +40,20 @@ const MAX_DECODE_ALLOC: u64 = 32 * 1024 * 1024;
 /// it plays, arrives as a video sample does: see
 /// [`sample_fetch::FetchBudget::for_transfer`].
 const IMAGE_FETCH_TIMEOUT: Duration = Duration::from_secs(15);
+#[cfg(any(not(target_os = "android"), test))]
 const CAMERA_POLL: Duration = Duration::from_millis(100);
 /// How many capture modes a worker tries before giving up on a device.
 ///
 /// See [`camera_candidate_formats`] for why one mode is not enough.
+#[cfg(any(not(target_os = "android"), test))]
 const CAMERA_FORMAT_CANDIDATES: usize = 4;
+#[cfg(any(not(target_os = "android"), test))]
 const CAMERA_FIRST_FRAME_TIMEOUT: Duration = Duration::from_secs(5);
 /// OxiMedia's AVFoundation runner requests TCC authorization asynchronously
 /// after `open` returns and waits for up to 60 seconds. Its public session API
 /// does not expose authorization state, so the first-frame allowance includes
 /// that full prompt plus five seconds for capture startup.
+#[cfg(any(not(target_os = "android"), test))]
 const MACOS_CAMERA_FIRST_FRAME_TIMEOUT: Duration = Duration::from_secs(65);
 const CAMERA_RETRY: Duration = Duration::from_secs(5);
 const CAMERA_PREVIEW_EDGE: usize = 64;
@@ -62,6 +69,7 @@ const SETTINGS_PREVIEW_BIT: u8 = 1 << SETTINGS_PREVIEW_SLOT;
 /// The two consumers of the lease-less slot, as bits of one mask.
 const NATIVE_REQUEST_ROW: u8 = 1;
 const NATIVE_REQUEST_THEME: u8 = 2;
+#[cfg(any(not(target_os = "android"), test))]
 const CAMERA_PREFERRED_ENCODINGS: [CaptureEncoding; 11] = [
     CaptureEncoding::Raw(PixelFormat::Nv12),
     CaptureEncoding::Raw(PixelFormat::Nv21),
@@ -639,6 +647,7 @@ fn diagnostic_slot(slot: u8) -> u8 {
     }
 }
 
+#[cfg(any(not(target_os = "android"), test))]
 fn camera_first_frame_timeout(backend: BackendKind) -> Duration {
     if backend == BackendKind::AvFoundation {
         MACOS_CAMERA_FIRST_FRAME_TIMEOUT
@@ -1403,6 +1412,7 @@ fn read_media(
     })
 }
 
+#[cfg(any(not(target_os = "android"), test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CameraSetupError {
     Unavailable,
@@ -1410,6 +1420,7 @@ enum CameraSetupError {
     NegotiatedFormatChanged,
 }
 
+#[cfg(any(not(target_os = "android"), test))]
 impl CameraSetupError {
     fn message(self) -> &'static str {
         match self {
@@ -1424,6 +1435,7 @@ impl CameraSetupError {
     }
 }
 
+#[cfg(any(not(target_os = "android"), test))]
 fn supported_camera_format(format: CaptureFormat) -> bool {
     format.width != 0
         && format.height != 0
@@ -1439,6 +1451,7 @@ fn supported_camera_format(format: CaptureFormat) -> bool {
         }
 }
 
+#[cfg(any(not(target_os = "android"), test))]
 fn select_camera_format(formats: &[CaptureFormat]) -> Option<CaptureFormat> {
     let safe = formats
         .iter()
@@ -1452,6 +1465,7 @@ fn select_camera_format(formats: &[CaptureFormat]) -> Option<CaptureFormat> {
     oximedia_capture::negotiate(&safe, &request).ok()
 }
 
+#[cfg(any(not(target_os = "android"), test))]
 fn camera_inventory_format(formats: &[CaptureFormat]) -> Result<CaptureFormat, CameraSetupError> {
     // Media Foundation can expose a device while withholding its formats
     // when Windows camera privacy access is denied. An empty inventory is
@@ -1477,6 +1491,7 @@ fn camera_inventory_format(formats: &[CaptureFormat]) -> Result<CaptureFormat, C
 /// The widest landscape mode is the closest a format inventory can come to
 /// naming what the preset will pick, which makes it the candidate worth
 /// spending the first (and longest) attempt on.
+#[cfg(any(not(target_os = "android"), test))]
 fn preset_default_format(formats: &[CaptureFormat]) -> Option<CaptureFormat> {
     formats
         .iter()
@@ -1491,6 +1506,7 @@ fn preset_default_format(formats: &[CaptureFormat]) -> Option<CaptureFormat> {
 }
 
 /// Add `format` unless the list is full or already holds an equivalent mode.
+#[cfg(any(not(target_os = "android"), test))]
 fn push_camera_candidate(candidates: &mut Vec<CaptureFormat>, format: CaptureFormat) {
     if candidates.len() < CAMERA_FORMAT_CANDIDATES
         && !candidates
@@ -1510,6 +1526,7 @@ fn push_camera_candidate(candidates: &mut Vec<CaptureFormat>, format: CaptureFor
 /// tell the two apart is to try another mode. Hence a list rather than a
 /// single choice, ordered so the first entry is the one most likely to be
 /// honoured and the rest descend from largest to smallest.
+#[cfg(any(not(target_os = "android"), test))]
 fn camera_candidate_formats(
     formats: &[CaptureFormat],
 ) -> Result<Vec<CaptureFormat>, CameraSetupError> {
@@ -1539,6 +1556,7 @@ fn camera_candidate_formats(
     Ok(candidates)
 }
 
+#[cfg(any(not(target_os = "android"), test))]
 fn camera_config(id: &str, selected: CaptureFormat) -> CaptureConfig {
     let mut config = CaptureConfig::default()
         .with_device(DeviceSelector::Id(id.to_owned()))
@@ -1552,6 +1570,7 @@ fn camera_config(id: &str, selected: CaptureFormat) -> CaptureConfig {
 }
 
 /// The modes to try for one device, best first. Never empty on success.
+#[cfg(any(not(target_os = "android"), test))]
 fn camera_candidates(
     device: Option<u32>,
 ) -> Result<Vec<(CaptureConfig, CaptureFormat)>, CameraSetupError> {
@@ -1564,6 +1583,7 @@ fn camera_candidates(
         .collect())
 }
 
+#[cfg(any(not(target_os = "android"), test))]
 fn camera_format_matches(selected: CaptureFormat, negotiated: CaptureFormat) -> bool {
     selected.encoding == negotiated.encoding
         && selected.width == negotiated.width
@@ -1572,6 +1592,7 @@ fn camera_format_matches(selected: CaptureFormat, negotiated: CaptureFormat) -> 
 }
 
 /// How an attempt at one capture mode ended.
+#[cfg(any(not(target_os = "android"), test))]
 enum CameraAttempt {
     /// The mode produced no frame. Another mode may still work; the message is
     /// what to report if none does.
@@ -1583,6 +1604,7 @@ enum CameraAttempt {
     Fatal(&'static str),
 }
 
+#[cfg(not(target_os = "android"))]
 fn capture_camera(
     slot: u8,
     device: Option<u32>,
@@ -1641,7 +1663,133 @@ fn capture_camera(
     }
 }
 
+#[cfg(target_os = "android")]
+fn capture_camera(
+    slot: u8,
+    device: Option<u32>,
+    cancel: Arc<AtomicBool>,
+    policy: Arc<InputPolicyState>,
+    lease: Option<HydraInputLease>,
+) {
+    use jni::{
+        JavaVM,
+        objects::{JByteArray, JObject, JValue},
+    };
+    fn java<T>(
+        f: impl FnOnce(&mut jni::JNIEnv<'_>, &JObject<'_>) -> jni::errors::Result<T>,
+    ) -> Option<T> {
+        let ctx = ndk_context::android_context();
+        let vm = unsafe { JavaVM::from_raw(ctx.vm().cast()) }.ok()?;
+        let mut env = vm.attach_current_thread().ok()?;
+        let context = unsafe { JObject::from_raw(ctx.context().cast()) };
+        let result = f(&mut env, &context);
+        if result.is_err() {
+            let _ = env.exception_clear();
+        }
+        result.ok()
+    }
+    let active =
+        || !cancel.load(Ordering::Acquire) && policy.webcam_allowed.load(Ordering::Acquire);
+    let _clear_lease = CameraLeaseClear(lease.clone());
+    if !active() {
+        return;
+    }
+    let acquired = java(|env, ctx| {
+        env.call_method(
+            ctx,
+            "beginCamera",
+            "(I)Z",
+            &[JValue::Int(device.unwrap_or(0).min(16) as i32)],
+        )?
+        .z()
+    })
+    .unwrap_or(false);
+    if !acquired {
+        policy.commit_camera_error(
+            slot as usize,
+            &cancel,
+            "Allow the camera in Android permissions, then enable Hydra webcam in Settings",
+        );
+        return;
+    }
+    struct Release;
+    impl Drop for Release {
+        fn drop(&mut self) {
+            let _ = java(|env, ctx| env.call_method(ctx, "endCamera", "()V", &[]).map(|_| ()));
+        }
+    }
+    let _release = Release;
+    policy.commit_camera_opening(slot as usize, &cancel);
+    let mut last = Instant::now();
+    let mut published = false;
+    let mut sequence = 0_i32;
+    while active() {
+        let frame = java(|env, ctx| {
+            let value = env
+                .call_method(ctx, "getCameraFrame", "(I)[B", &[JValue::Int(sequence)])?
+                .l()?;
+            if value.is_null() {
+                return Ok(Vec::new());
+            }
+            env.convert_byte_array(JByteArray::from(value))
+        })
+        .unwrap_or_default();
+        if frame.len() >= 16 {
+            let width = u32::from_le_bytes([frame[0], frame[1], frame[2], frame[3]]);
+            let height = u32::from_le_bytes([frame[4], frame[5], frame[6], frame[7]]);
+            if width > 0
+                && height > 0
+                && width <= 640
+                && height <= 640
+                && frame.len() == 16 + width as usize * height as usize * 4
+            {
+                last = Instant::now();
+                sequence = i32::from_le_bytes([frame[8], frame[9], frame[10], frame[11]]);
+                let mut rgba = frame[16..].to_vec();
+                if frame[12] & 1 != 0 {
+                    mirror_camera_frame(width, height, &mut rgba);
+                }
+                let preview = camera_preview(width, height, &rgba);
+                let picture = (policy.native_camera_requests.load(Ordering::Relaxed)
+                    & NATIVE_REQUEST_THEME
+                    != 0)
+                    .then(|| camera_picture(width, height, &rgba))
+                    .flatten();
+                let accepted = match &lease {
+                    Some(lease) => lease.publish(width, height, rgba).unwrap_or(false),
+                    None => true,
+                };
+                if !accepted
+                    || !policy.commit_camera_frame(
+                        slot as usize,
+                        &cancel,
+                        preview,
+                        picture,
+                        !published,
+                    )
+                {
+                    return;
+                }
+                published = true;
+            }
+        }
+        if last.elapsed() > Duration::from_secs(8) {
+            policy.commit_camera_error(
+                slot as usize,
+                &cancel,
+                "The Android camera is unavailable; return to Rustel and check camera permission",
+            );
+            return;
+        }
+        // Android publishes only the newest frame; never replay stale camera work.
+        // Poll between capture ticks so a just-published frame does not wait
+        // almost another full camera period before reaching the painter.
+        std::thread::sleep(Duration::from_millis(8));
+    }
+}
+
 /// Run one capture mode until it fails, is revoked, or the worker is replaced.
+#[cfg(any(not(target_os = "android"), test))]
 fn capture_camera_mode(
     slot: u8,
     config: CaptureConfig,
@@ -1873,6 +2021,7 @@ fn decode_image(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
     Ok((width, height, rgba.into_raw()))
 }
 
+#[cfg(any(not(target_os = "android"), test))]
 fn camera_frame_rgba(
     frame: &oximedia_capture::CaptureFrame,
 ) -> Result<(u32, u32, Vec<u8>), String> {
@@ -1885,6 +2034,7 @@ fn camera_frame_rgba(
     raw_frame_rgba(video)
 }
 
+#[cfg(any(not(target_os = "android"), feature = "video", test))]
 fn raw_frame_rgba(video: &VideoFrame) -> Result<(u32, u32, Vec<u8>), String> {
     let (width, height) = (video.width, video.height);
     let bytes = checked_rgba_len(width, height, "webcam frame")?;
@@ -2017,6 +2167,7 @@ fn checked_rgba_len(width: u32, height: u32, kind: &str) -> Result<usize, String
     Ok(bytes)
 }
 
+#[cfg(any(not(target_os = "android"), feature = "video", test))]
 fn plane(video: &VideoFrame, index: usize) -> Result<&Plane, String> {
     video
         .planes
@@ -2024,6 +2175,7 @@ fn plane(video: &VideoFrame, index: usize) -> Result<&Plane, String> {
         .ok_or_else(|| format!("webcam frame is missing plane {index}"))
 }
 
+#[cfg(any(not(target_os = "android"), feature = "video", test))]
 fn row_at(plane: &Plane, y: usize, needed: usize) -> Result<&[u8], String> {
     let row = plane.row(y);
     if row.len() < needed {
@@ -2035,6 +2187,7 @@ fn row_at(plane: &Plane, y: usize, needed: usize) -> Result<&[u8], String> {
     Ok(row)
 }
 
+#[cfg(any(not(target_os = "android"), feature = "video", test))]
 fn copy_rgb(video: &VideoFrame, rgba: &mut [u8], alpha: bool) -> Result<(), String> {
     let plane = plane(video, 0)?;
     let channels = if alpha { 4 } else { 3 };
@@ -2050,18 +2203,21 @@ fn copy_rgb(video: &VideoFrame, rgba: &mut [u8], alpha: bool) -> Result<(), Stri
     Ok(())
 }
 
+#[cfg(any(not(target_os = "android"), feature = "video", test))]
 fn put_rgba(rgba: &mut [u8], width: u32, x: usize, y: usize, rgb: [u8; 3]) {
     let at = (y * width as usize + x) * 4;
     rgba[at..at + 3].copy_from_slice(&rgb);
     rgba[at + 3] = 255;
 }
 
+#[cfg(any(not(target_os = "android"), feature = "video", test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum YuvMatrix {
     Bt601,
     Bt709,
 }
 
+#[cfg(any(not(target_os = "android"), feature = "video", test))]
 fn yuv_matrix(matrix: MatrixCoefficients) -> YuvMatrix {
     match matrix {
         // These are the two standard-definition matrices whose coefficients
@@ -2076,6 +2232,7 @@ fn yuv_matrix(matrix: MatrixCoefficients) -> YuvMatrix {
     }
 }
 
+#[cfg(any(not(target_os = "android"), feature = "video", test))]
 fn yuv_to_rgb(y: u8, u: u8, v: u8, full_range: bool, matrix: YuvMatrix) -> [u8; 3] {
     let (y, u, v) = (i32::from(y), i32::from(u) - 128, i32::from(v) - 128);
     let (r, g, b) = match (matrix, full_range) {
@@ -2109,6 +2266,7 @@ fn yuv_to_rgb(y: u8, u: u8, v: u8, full_range: bool, matrix: YuvMatrix) -> [u8; 
     [clamp_u8(r), clamp_u8(g), clamp_u8(b)]
 }
 
+#[cfg(any(not(target_os = "android"), feature = "video", test))]
 fn clamp_u8(value: i32) -> u8 {
     value.clamp(0, 255) as u8
 }

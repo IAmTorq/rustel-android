@@ -1,0 +1,66 @@
+name: Android wrapper checks
+
+# Read-only wrapper checks. This workflow cannot sign or publish an APK.
+on:
+  push:
+    branches: [android-port]
+    paths:
+      - '.github/workflows/android-wrapper.yml'
+      - 'android/app/**'
+      - 'android/qa/**'
+      - 'android/test_ui.cjs'
+      - 'android/package*.json'
+      - 'android/*source*.py'
+      - 'android/source-*.json'
+      - 'android/check-publication.py'
+  pull_request:
+    branches: [android-port]
+    paths:
+      - '.github/workflows/android-wrapper.yml'
+      - 'android/app/**'
+      - 'android/qa/**'
+      - 'android/test_ui.cjs'
+      - 'android/package*.json'
+      - 'android/*source*.py'
+      - 'android/source-*.json'
+      - 'android/check-publication.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wrapper:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, upstream pin
+        with:
+          persist-credentials: false
+      - name: Publication guard
+        run: python3 android/check-publication.py
+      - name: Corresponding-source archive modes
+        run: python3 android/qa/test-source-archive.py
+      - name: Camera, terminal framing and document-copy contracts
+        run: python3 android/qa/test-java.py
+      - name: Install pinned test dependencies
+        run: npm ci --ignore-scripts --prefix android
+      - name: Install Chromium for wrapper checks
+        working-directory: android
+        run: npx playwright install --with-deps chromium
+      - name: Input, display and renderer fallback
+        run: node android/test_ui.cjs
+      - name: Cache scheduling contract
+        run: node android/qa/test-renderer-cache.cjs
+      - name: Evidence freshness and incomplete telemetry
+        run: node android/qa/test-observation.cjs
+      - name: Check phone theme palette behavior
+        run: node android/qa/test-phone-theme.cjs
+      - name: Complete finite native corpus output
+        run: python3 android/qa/test_corpus_contract.py
+      - name: Offline comparison failure handling
+        run: python3 android/qa/test-interaction-comparison.py
+      - name: Sustained GPU atlas regression, masks and inverse fallback
+        run: node android/qa/cache-gpu-stress.cjs
+      - name: Glyph pixel stability after cache churn
+        run: node android/qa/cache-gpu-pixels.cjs

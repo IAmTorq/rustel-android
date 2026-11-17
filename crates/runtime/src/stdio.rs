@@ -168,6 +168,16 @@ pub fn out() -> &'static Out {
     OUT.get_or_init(|| Out(Mutex::new(copy_of_stdout().ok())))
 }
 
+/// Install the app-owned output pipe without redirecting Android process stdio.
+#[cfg(target_os = "android")]
+pub fn install_android_output(file: File) {
+    *out().lock().0 = Some(file);
+}
+#[cfg(target_os = "android")]
+pub fn close_android_output() {
+    out().lock().0.take();
+}
+
 impl Out {
     /// The stream for a number of writes with no line of a different
     /// thread between them. A process with no standard output loses each
@@ -284,14 +294,23 @@ macro_rules! outln {
 /// loaded plugin keeps as its output. A test must not call this: the test
 /// runner reports on descriptor 1.
 pub fn keep_clear() -> bool {
-    static DONE: OnceLock<bool> = OnceLock::new();
-    *DONE.get_or_init(|| {
-        let _ = out();
-        // A line that waits in the buffer of the standard library goes
-        // first.
-        let _ = io::stdout().flush();
-        to_null()
-    })
+    // There are no desktop VST plugins in this host. Android owns fd 0/1/2;
+    // the UI has a dedicated pipe installed through install_android_output.
+    #[cfg(target_os = "android")]
+    {
+        true
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        static DONE: OnceLock<bool> = OnceLock::new();
+        *DONE.get_or_init(|| {
+            let _ = out();
+            // A line that waits in the buffer of the standard library goes
+            // first.
+            let _ = io::stdout().flush();
+            to_null()
+        })
+    }
 }
 
 /// The path that reaches the stream of [`out`], when `path` names the
@@ -311,7 +330,7 @@ pub fn path_to_out(path: &std::path::Path) -> Option<std::path::PathBuf> {
     same.then(|| format!("/dev/fd/{}", stream.as_raw_fd()).into())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 fn to_null() -> bool {
     use std::os::fd::AsRawFd;
     let Ok(null) = File::options().write(true).open("/dev/null") else {

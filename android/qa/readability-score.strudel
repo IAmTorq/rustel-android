@@ -1,0 +1,6 @@
+// QA_ASCII_0123456789 abcXYZ (){}[]+-/*
+// Unicode: café µ Δ 中文 → ♫
+const level = 0.02
+setcps(0.5)
+$: note("c3 e3 g3 b3").s("sine").gain(level)
+// QA_END_SENTINEL_9876543210

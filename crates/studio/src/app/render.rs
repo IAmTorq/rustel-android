@@ -262,6 +262,8 @@ impl App {
     }
 
     pub(super) fn draw(&mut self, terminal: &mut TerminalSession) -> Result<(), RuntimeError> {
+        #[cfg(target_os = "android")]
+        crate::android_controls::update_ui_palette(&self.theme);
         let drawing = Instant::now();
         let started = Instant::now();
         // The frame goes out as one synchronized update - text, then the
@@ -271,6 +273,14 @@ impl App {
         self.sync_editor_keybindings();
         terminal.set_cursor_shape(self.editor_cursor_shape())?;
         terminal.begin_frame();
+        #[cfg(target_os = "android")]
+        if crate::android_terminal::take_repaint() {
+            // WebView can shrink and expand between Studio draws. Its terminal
+            // has reflowed even if ratatui sees the original size again.
+            // resize clears the fullscreen viewport without a TTY cursor query.
+            let area = terminal.terminal_mut().size()?.into();
+            terminal.terminal_mut().resize(area)?;
+        }
         // The paint callback always runs - `draw` renders the buffer, then
         // flushes - so its verdict comes back through the cell, and a compose
         // error still aborts the studio.
@@ -310,6 +320,15 @@ impl App {
         let shipped_pixels = !images.is_empty()
             && super::super::graphics::tier() == super::super::graphics::Tier::Pixels;
         terminal.end_frame(&images);
+        #[cfg(target_os = "android")]
+        {
+            let r = self.regions.reference;
+            crate::android_terminal::set_reference_region(if self.reference_panel.is_some() {
+                [r.x, r.y, r.width, r.height]
+            } else {
+                [0; 4]
+            });
+        }
         // The whole frame, not just the shipping: compositing the backdrop
         // and rasterising every canvas are the other two thirds of what the
         // budget governs, and they happen above.
@@ -1912,6 +1931,16 @@ impl App {
             .performance
             .record_frame(painted_at.saturating_duration_since(started), painted_at)
         {
+            #[cfg(target_os = "android")]
+            self.log.push(
+                LogLevel::Debug,
+                "performance",
+                serde_json::json!({
+                    "studio_input_painted": input,
+                })
+                .to_string(),
+            );
+            #[cfg(not(target_os = "android"))]
             eprintln!("{}", serde_json::json!({ "studio_input_painted": input }));
         }
         if let Some(snapshot) = self.performance.take_running_snapshot(painted_at) {

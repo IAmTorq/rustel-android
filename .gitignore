@@ -37,3 +37,45 @@ crates/runtime/tests/e2e/golden/*.actual
 # Include corpus and regression scores despite the general `*.strudel` ignore.
 !crates/runtime/tests/e2e/scores/**/*.strudel
 rustel-set.json
+
+# Android private material and local build output
+/android/signing/
+/android/app/assets/themes/
+/android/app/assets/rustel-android-source.tar.gz
+/android/apk-build/
+/android/dist/
+/android/downloads/
+/android/libclang/
+/android/node_modules/
+/android/qa/*.log
+/android/qa/*.png
+/android/qa/*.zip
+/android/qa/*telemetry*
+/android/qa/user-*
+*.jks
+*.keystore
+*.p12
+*.apk
+*.idsig
+.env
+.env.*
+!/android/qa/readability-score.strudel
+!/android/qa/readability-hydra.strudel
+
+/android/ui-validation.json
+/android/qa/*-results.json
+/android/qa/*-progress.json
+/android/qa/cache-gpu-stress.json
+/android/qa/performance-*.json
+
+/android/qa/cases.json
+/android/qa/goldens.json
+/android/qa/device-corpus-results.jsonl
+/android/qa/device-corpus-comparison.json
+/android/qa/generated/
+/android/apk-build.log
+
+# Local build overlays and test-session records.
+/android/build_local_apk.py
+/android/qa/evidence/
+/android/docs/BUG-TEST-MASTER.md

@@ -280,6 +280,19 @@ dependencies = [
 
 [[package]]
 name = "audio_thread_priority"
+version = "0.35.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b1b4a0adbf971420cca66a75361a1190f34a6762d66361e5cde03dda35d1ed3"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "log",
+ "mach2 0.4.3",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "audio_thread_priority"
 version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0b30b2f3d2da482d0faeaafd8f88a38fbc62abb58d3b402cfa195793f4c92ab"
@@ -321,6 +334,26 @@ checksum = "339abbe78e73178762e23bea9dfd08e697eb3f3301cd4be981c0f78ba5859195"
 dependencies = [
  "outref",
  "vsimd",
+]
+
+[[package]]
+name = "bindgen"
+version = "0.72.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
+dependencies = [
+ "bitflags 2.13.1",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.13.0",
+ "log",
+ "prettyplease 0.2.37",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash 2.1.3",
+ "shlex 1.3.0",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -427,7 +460,7 @@ checksum = "d4654961ad0494e4774c5c60b4cb4cd0ae9b9d92d039d901638b1dba97ebebf5"
 dependencies = [
  "darling",
  "ident_case",
- "prettyplease",
+ "prettyplease 0.3.0",
  "proc-macro2",
  "quote",
  "syn 3.0.3",
@@ -533,7 +566,7 @@ dependencies = [
  "find-msvc-tools",
  "jobserver",
  "libc",
- "shlex",
+ "shlex 2.0.1",
 ]
 
 [[package]]
@@ -541,6 +574,15 @@ name = "cesu8"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d43a04d8753f35258c91f8ec639f792891f748a1edbd759cf1dcea3382ad83c"
+
+[[package]]
+name = "cexpr"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fac387a98bb7c37292057cffc56d62ecb629900026402633ae9160df93a8766"
+dependencies = [
+ "nom 7.1.3",
+]
 
 [[package]]
 name = "cfg-if"
@@ -553,6 +595,17 @@ name = "cfg_aliases"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
+
+[[package]]
+name = "clang-sys"
+version = "1.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "157a8ba7b480713b56f4c09fd13fc3e0a22a5dfab8097ba61cbc5feef950788a"
+dependencies = [
+ "glob",
+ "libc",
+ "libloading 0.8.9",
+]
 
 [[package]]
 name = "clap"
@@ -822,6 +875,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f02e8d0327b42d3e2e4ab2119af397344eb9fc54a34bf0ddeaa1277af8681f1"
 dependencies = [
  "alsa",
+ "alsa-sys",
+ "audio_thread_priority 0.35.1",
  "block2 0.6.2",
  "coreaudio-rs",
  "dasp_sample",
@@ -1969,6 +2024,15 @@ checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
 name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
@@ -2484,8 +2548,6 @@ dependencies = [
 [[package]]
 name = "mp3lame-sys"
 version = "0.1.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54e3b1772db47828840702e5a2e05694527f731abadf9b931355d54035f019d8"
 dependencies = [
  "autotools",
  "cc",
@@ -3943,6 +4005,16 @@ checksum = "e8cf8e6a8aa66ce33f63993ffc4ea4271eb5b0530a9002db8455ea6050c77bfa"
 
 [[package]]
 name = "prettyplease"
+version = "0.2.37"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
+dependencies = [
+ "proc-macro2",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "prettyplease"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bfe0f4c752e450fc2faf62654f1c134747922825d5b04ca717b8874f41a40c0"
@@ -4350,6 +4422,7 @@ name = "rquickjs-sys"
 version = "0.14.0"
 source = "git+https://github.com/tzfm/rquickjs?rev=ed2337c6f187996ef97f7e4e44458cfbc33266f4#ed2337c6f187996ef97f7e4e44458cfbc33266f4"
 dependencies = [
+ "bindgen",
  "cc",
 ]
 
@@ -4408,10 +4481,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustel-android"
+version = "0.1.0"
+dependencies = [
+ "jni 0.21.1",
+ "libc",
+ "ndk-context",
+ "rquickjs-sys",
+ "rustel-audio",
+ "rustel-fraction",
+ "rustel-runtime",
+ "rustel-studio",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "rustel-audio"
 version = "0.1.6"
 dependencies = [
- "audio_thread_priority",
+ "audio_thread_priority 0.38.0",
  "cpal",
  "libc",
  "rustel-kabel",
@@ -4542,11 +4631,13 @@ dependencies = [
  "coremidi",
  "gilrs",
  "image",
+ "jni 0.21.1",
  "libc",
  "log",
  "mach2 0.6.0",
  "midir",
  "mp3lame-encoder",
+ "ndk-context",
  "objc2 0.6.4",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
@@ -4622,9 +4713,11 @@ dependencies = [
  "arboard",
  "crossterm",
  "getrandom 0.4.3",
+ "jni 0.21.1",
  "libc",
  "midir",
  "miniz_oxide",
+ "ndk-context",
  "ratatui",
  "regex",
  "ropey",
@@ -4679,10 +4772,10 @@ dependencies = [
 [[package]]
 name = "rustel-studio-themes"
 version = "0.2.0"
-source = "git+https://github.com/tzfm/rustel-studio-themes.git?tag=v0.2.0#7c0c9bf9c711da823d6dbd1bd043e66882217b2a"
 dependencies = [
  "ratatui",
  "serde",
+ "serde_json",
  "tachyonfx",
  "unicode-width",
 ]
@@ -5047,6 +5140,12 @@ name = "shell-words"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc6fe69c597f9c37bfeeeeeb33da3530379845f10be461a66d16d03eca2ded77"
+
+[[package]]
+name = "shlex"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "shlex"

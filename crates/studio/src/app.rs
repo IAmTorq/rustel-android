@@ -217,6 +217,7 @@ mod string_roles;
 mod theme_sheets;
 mod transport;
 #[cfg(feature = "video")]
+#[cfg_attr(target_os = "android", path = "app/video_window_android.rs")]
 pub mod video_window;
 mod vim;
 mod viz_panel;
@@ -450,6 +451,21 @@ pub fn run(options: StudioOptions) -> Result<(), RuntimeError> {
         });
         receiver
     });
+    #[cfg(target_os = "android")]
+    let result = match run_once(options.clone()) {
+        Err(error) => Err(error),
+        Ok(Session::Ended(result)) => result,
+        Ok(Session::Crashed { file }) => {
+            drop(file);
+            Err(RuntimeError::Message(format!(
+                "The studio stopped: {}",
+                crash::take_report()
+                    .map(|report| report.message)
+                    .unwrap_or_else(|| "native fault".into())
+            )))
+        }
+    };
+    #[cfg(not(target_os = "android"))]
     let result = loop {
         match run_once(options.clone()) {
             Err(error) => break Err(error),
@@ -703,6 +719,7 @@ fn run_once(mut options: StudioOptions) -> Result<Session, RuntimeError> {
     rustel_runtime::stdio::keep_clear();
     // Normal sessions move stderr into the Studio log. The hidden measurement
     // stream keeps stderr separate so its controller can consume the protocol.
+    #[cfg(not(target_os = "android"))]
     if !app.performance.enabled() && app.log.capture_stderr() {
         app.log.push(
             LogLevel::Info,

@@ -1,0 +1,6 @@
+await initHydra({ feedStrudel: 1 })
+osc(10, 0.1, 0.8).rotate(0.2).kaleid(4).out()
+setCps(.5)
+$: note("c3 e3 g3 b3").s("triangle").gain(.05)._pianoroll()
+$: s("sbd!2").gain(.08)
+$: s("white!4").hpf(6000).decay(.03).sustain(0).gain(.02)

@@ -22,9 +22,11 @@ use super::list_keys::page_selection;
 use super::slider::{SliderTrack, Travel, pointer_value, rail_stepped, snap_value};
 use super::smart_action::guess_range;
 use super::*;
+#[cfg(any(feature = "vst", test))]
+use crate::knobs_panel::KnobPresets;
 use crate::knobs_panel::{
-    AddList, CallAt, Fader, HeldOff, HeldText, Knob, KnobEdit, KnobPlace, KnobPresets, KnobState,
-    KnobsPanel, add_row_at, add_sheet, add_shown, knob_at, knob_row, parts, presets_rows, shown,
+    AddList, CallAt, Fader, HeldOff, HeldText, Knob, KnobEdit, KnobPlace, KnobState, KnobsPanel,
+    add_row_at, add_sheet, add_shown, knob_at, knob_row, parts, presets_rows, shown,
 };
 use crate::number_form::{Field, SliderForm, format_value, short_number};
 use crate::prefs::KnobRange;
@@ -3247,7 +3249,8 @@ mod tests {
         let directory = tempfile::tempdir().expect("tempdir");
         let mut app = app_over(directory.path());
         app.ui_settings.auto_evaluate = true;
-        let score = "$: s(\"bd\").gain(0.5)\n";
+        // Control dispatch must not depend on a downloaded drum bank.
+        let score = "$: note(\"c4\").s(\"sine\").gain(0.5)\n";
         app.scenes.current_mut().editor = Editor::new(score).expect("score");
         let caret = score.find("0.5").expect("the value");
         let _ = app

@@ -472,6 +472,25 @@ mod tests {
     }
 
     #[test]
+    fn completed_worker_jobs_publish_busy_time_without_inventing_a_join_wait() {
+        let publisher = RealtimeLoadPublisher::new();
+        let mut meter = RealtimeLoadMeter::new(48_000, &publisher);
+        let plugins = PoolFigures {
+            worker_nanos: 400_000,
+            ..PoolFigures::default()
+        };
+        for _ in 0..REALTIME_LOAD_PUBLISH_INTERVAL {
+            meter.observe(480, 5_000_000, plugins, 48_000, &publisher);
+        }
+        let snapshot = publisher.try_snapshot().expect("published worker figures");
+        assert_eq!(
+            snapshot.worker_busy_nanos,
+            400_000 * REALTIME_LOAD_PUBLISH_INTERVAL
+        );
+        assert_eq!(snapshot.join_wait_nanos, 0);
+    }
+
+    #[test]
     fn changing_sample_rate_starts_a_fresh_window() {
         let publisher = RealtimeLoadPublisher::new();
         let mut meter = RealtimeLoadMeter::new(48_000, &publisher);

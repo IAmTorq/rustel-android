@@ -1,0 +1,15 @@
+const qa=require('./regression-context.cjs'),d=require('./device.cjs'),o=require('./observation.cjs'),fs=require('fs'),path=require('path'),crypto=require('crypto'),assert=require('assert');
+(async()=>{const {browser,page}=await d.connect(),cases=[];let complete=false;
+try{
+ for(const sound of ['bd','sd','hh','cp']){
+  await d.key(page,'F8');await page.waitForTimeout(200);const code='s("'+sound+'!8").gain(.1)';await d.source(page,code);await d.key(page,'F5');const before=await o.playing(page,crypto.createHash('sha256').update(code).digest('hex'));let ready=false;const peaks=[];
+  for(let i=0;i<150;i++){await page.waitForTimeout(200);const rows=await d.rows(page),state=o.snapshot();if(state.visible_error||rows.slice(0,3).some(r=>/sound.*failed|failed.*sound/i.test(r)))throw Error('Default sample failure: '+sound);ready=rows.slice(0,3).some(r=>r.includes('ready'));if(ready&&i>10&&Number.isFinite(state.master_peak_db))peaks.push(state.master_peak_db);if(ready&&i>=25&&peaks.length>=5)break;}
+  // The performance log is only sampled once per second: a periodic short
+  // hi-hat can always fall between those observations. Read the actual
+  // terminal meter over many rendered frames instead of accepting its floor.
+  const uiPeaks=await page.evaluate(async()=>{const values=[];const timer=setInterval(()=>{const row=term.buffer.active.getLine(term.buffer.active.baseY+term.rows-1)?.translateToString(true)||'';const match=row.match(/pk\s*(-?\d+(?:\.\d+)?)/);if(match)values.push(Number(match[1]));},16);try{await new Promise(r=>setTimeout(r,3000));return values;}finally{clearInterval(timer);}});
+  const after=o.snapshot();assert(ready&&uiPeaks.length>=5,'Sample never produced a readable meter: '+sound);assert(after.playing&&after.callbacks>before.callbacks&&after.allocator_tripwire_armed);const r={sound,ready:true,gain:.1,telemetryOutputObservations:peaks.length,maximumTelemetryPeakDb:peaks.length?Math.max(...peaks):null,uiOutputObservations:uiPeaks.length,maximumUiPeakDb:Math.max(...uiPeaks),newXruns:after.callback_xruns-before.callback_xruns,newLateEvents:after.late_events-before.late_events,newCallbackAllocations:after.callback_allocations-before.callback_allocations};assert(r.maximumUiPeakDb>-59.9&&r.maximumUiPeakDb<0,'Sample output not established above meter floor: '+sound);assert(!r.newXruns&&!r.newLateEvents&&!r.newCallbackAllocations);cases.push(r);
+ }
+ complete=true;
+}finally{await d.key(page,'F8').catch(()=>{});await d.source(page,fs.readFileSync(path.join(__dirname,'readability-hydra.strudel'),'utf8')).catch(()=>{});await browser.close();fs.writeFileSync(qa.result('default-samples.json'),JSON.stringify({date:new Date().toISOString().slice(0,10),dateBasis:'UTC',apkSha256:qa.digest,complete,cases,limits:['Existing caches are retained; no claim of a cold first download.','Normal default-bank resolution and finite digital output, not acoustic confirmation.','Four short drum samples; other banks, formats, resampling and retries remain separate.']},null,2));}
+console.log(JSON.stringify(cases));})().catch(e=>{console.error(e);process.exit(1)});

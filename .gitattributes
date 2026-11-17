@@ -26,3 +26,24 @@ rustelup/install text eol=lf
 rustelup/install.ps1 text eol=lf
 rustelup/rustelup text eol=lf
 rustelup/rustelup.ps1 text eol=lf
+
+# Preserve vendored source and compiled assets byte-for-byte. Their upstream
+# whitespace is not authored port code; local patches have separate provenance.
+android-native/vendor/mp3lame-sys/lame-3.100/** -whitespace
+android/app/assets/xterm.js -text -whitespace
+android/app/assets/addon-webgl.js -text -whitespace
+android/app/assets/addon-fit.js -text -whitespace
+
+# New port source uses LF on all development hosts.
+android/**/*.py text eol=lf
+android/**/*.ps1 text eol=lf
+android/**/*.java text eol=lf
+android/**/*.cjs text eol=lf
+android/**/*.json text eol=lf
+android/**/*.md text eol=lf
+android/**/*.xml text eol=lf
+android-native/src/*.rs text eol=lf
+.githooks/* text eol=lf
+
+# The unmodified LAME HACKING heading uses seven equals signs as an underline.
+android-native/vendor/mp3lame-sys/lame-3.100/HACKING conflict-marker-size=32

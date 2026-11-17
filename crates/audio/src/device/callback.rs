@@ -386,6 +386,10 @@ fn apply_tripwire_report(
 /// recovers from; any other kind, a rerouted default device included, has
 /// the owner open the stream again or report the failure.
 fn fails_stream(error: &cpal::Error) -> bool {
+    #[cfg(target_os = "android")]
+    if super::android::advisory_error(error.kind()) {
+        return false;
+    }
     error.kind() != cpal::ErrorKind::Xrun
 }
 
@@ -409,6 +413,10 @@ pub(super) fn live_error_callback(
     xruns: Arc<AtomicU64>,
 ) -> impl FnMut(cpal::Error) + Send + 'static {
     move |error| {
+        #[cfg(target_os = "android")]
+        if super::android::advisory_error(error.kind()) {
+            return;
+        }
         if fails_stream(&error) {
             gate.report_error(&failed, &errors);
         } else {

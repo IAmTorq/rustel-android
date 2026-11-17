@@ -4,6 +4,14 @@
 //! scheduling and device-ring production stay on the engine worker, while the
 //! terminal thread owns editing, input and drawing.
 
+#[cfg(target_os = "android")]
+mod android_clipboard;
+#[cfg(any(target_os = "android", test))]
+pub mod android_controls;
+#[cfg(any(target_os = "android", test))]
+pub mod android_pattern_import;
+#[cfg(any(target_os = "android", test))]
+pub mod android_terminal;
 pub mod app;
 mod background;
 mod bounded_file;

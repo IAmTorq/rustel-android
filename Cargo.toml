@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = [
+    "android-native",
+    "android-native/vendor/rustel-studio-themes",
     "crates/engine",
     "crates/fraction",
     "crates/core",
@@ -33,6 +35,7 @@ members = [
 # `-p rustel --no-default-features`, with
 # `--features mp3-export` to keep MP3 export.
 default-members = [
+    "android-native",
     "crates/engine",
     "crates/fraction",
     "crates/core",
@@ -125,3 +128,10 @@ crossterm = { git = "https://github.com/tzfm/crossterm", rev = "f772fd3f90be8a85
 # into a scratch it keeps instead. Return to crates.io after a release
 # includes colinmarc/pulseaudio-rs PR #22 (0.3.2 still zeroes).
 pulseaudio = { git = "https://github.com/undy-aeon/pulseaudio-rs", rev = "49f1f69a6b500bb513164edc2c19c69446f53a8c" }
+
+# Windows-hosted Android LAME builds need target, rather than MSVC, integer definitions.
+mp3lame-sys = { path = "android-native/vendor/mp3lame-sys" }
+
+[patch."https://github.com/tzfm/rustel-studio-themes.git"]
+# Correct the camera's cover crop; restore the upstream dependency when fixed there.
+rustel-studio-themes = { path = "android-native/vendor/rustel-studio-themes" }

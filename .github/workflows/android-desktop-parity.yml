@@ -1,0 +1,18 @@
+name: Android desktop parity checks
+
+# Reuse upstream's desktop checks without changing main or publishing artifacts.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    name: Desktop parity
+    cache-mode: read
+    uses: ./.github/workflows/heavy-checks.yml
+    with:
+      ref: ${{ github.sha }}
+      sha: ${{ github.sha }}
+      save_cache: false

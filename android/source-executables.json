@@ -1,0 +1,12 @@
+[
+  ".githooks/pre-push",
+  "android-native/vendor/mp3lame-sys/lame-3.100/config.guess",
+  "android-native/vendor/mp3lame-sys/lame-3.100/config.sub",
+  "android-native/vendor/mp3lame-sys/lame-3.100/configure",
+  "android-native/vendor/mp3lame-sys/lame-3.100/depcomp",
+  "android-native/vendor/mp3lame-sys/lame-3.100/install-sh",
+  "android-native/vendor/mp3lame-sys/lame-3.100/ltmain.sh",
+  "android-native/vendor/mp3lame-sys/lame-3.100/missing",
+  "rustelup/install",
+  "rustelup/rustelup"
+]

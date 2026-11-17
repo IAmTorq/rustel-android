@@ -19,8 +19,8 @@ use oxc_ast::ast::{
     ExportDeclaration, ExportDefaultDeclaration, ExportFromDeclaration, ExportNamedDeclaration,
     Expression, ForOfStatement, Function, IfStatement, ImportDeclaration, ImportExpression,
     ImportMeta, JSXAttributeValue, JSXText, NewExpression, ObjectExpression, ObjectPropertyKind,
-    Program, PropertyKey, RegExpLiteral, Statement, TemplateLiteral, VariableDeclarationKind,
-    VariableDeclarator,
+    Program, PropertyKey, RegExpLiteral, Statement, StringLiteral, TemplateLiteral,
+    VariableDeclarationKind, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, VisitMut, walk, walk_mut};
 use oxc_codegen::{Codegen, CodegenOptions};
@@ -427,6 +427,26 @@ struct HydraImageStringCollector {
     ranges: Vec<(usize, usize)>,
 }
 
+struct SampleMapStringCollector<'a> {
+    ranges: &'a mut Vec<(usize, usize)>,
+}
+
+impl<'a> Visit<'a> for SampleMapStringCollector<'_> {
+    fn visit_string_literal(&mut self, literal: &StringLiteral<'a>) {
+        self.ranges
+            .push((literal.span.start as usize, literal.span.end as usize));
+    }
+
+    fn visit_template_literal(&mut self, template: &TemplateLiteral<'a>) {
+        if template.expressions.is_empty() {
+            self.ranges
+                .push((template.span.start as usize, template.span.end as usize));
+        } else {
+            walk::walk_template_literal(self, template);
+        }
+    }
+}
+
 impl HydraImageStringCollector {
     /// Exempt `name`'s string argument at each position either table names.
     fn exempt_named_argument<'a>(&mut self, name: &str, arguments: &[Argument<'a>]) {
@@ -449,6 +469,16 @@ impl HydraImageStringCollector {
                 }
                 _ => {}
             }
+        }
+        // Sample maps contain names and paths, including array entries and
+        // quoted keys. None of their strings describe musical patterns.
+        if name == "samples"
+            && let Some(Argument::ObjectExpression(map)) = arguments.first()
+        {
+            SampleMapStringCollector {
+                ranges: &mut self.ranges,
+            }
+            .visit_object_expression(map);
         }
         // Plugin option keys name parameters. A preset value names a file.
         if matches!(name, "vst" | "vsti")
@@ -4194,17 +4224,10 @@ fn scan_statements(source: &str, regexes_are_present: bool) -> Vec<Scanned> {
     let mut index = 0usize;
 
     while index < bytes.len() {
-        while index < bytes.len() {
-            let width = if bytes[index].is_ascii_whitespace() {
-                1
-            } else {
-                line_terminator_width_at(bytes, index)
-            };
-            if width == 0 {
-                break;
-            }
-            index += width;
-        }
+        // A comment is trivia, not a statement. Otherwise each comment-only
+        // line probes through all following comments for a continuation,
+        // repeatedly scanning a large disabled section or trailing block.
+        index = skip_trivia(bytes, index);
         if index >= bytes.len() {
             break;
         }
@@ -4837,6 +4860,39 @@ mod tests {
         }
         assert!(global_writes("globalThis.a = (").is_empty());
         assert!(global_writes("").is_empty());
+    }
+
+    #[test]
+    fn sample_map_names_and_paths_are_data_but_other_patterns_still_compile() {
+        let source = r#"samples({
+            "kick one": ["https://example.test/kick%20one.wav", `https://example.test/kick2.wav`],
+            bass: "local:bass one.wav",
+            _base: "https://example.test/audio/"
+        })
+        $: s("bd hh").gain("0.1 0.2")
+        const other = { path: "not a sample" }"#;
+        let output = transpile(source, &TranspileOptions::default());
+        assert!(output.diagnostics.is_empty(), "{:?}", output.diagnostics);
+        for value in [
+            "kick one",
+            "https://example.test/kick%20one.wav",
+            "https://example.test/kick2.wav",
+            "local:bass one.wav",
+            "https://example.test/audio/",
+        ] {
+            assert!(
+                !output.output.contains(&format!("m('{value}'")),
+                "{}",
+                output.output
+            );
+        }
+        for pattern in ["bd hh", "0.1 0.2", "not a sample"] {
+            assert!(
+                output.output.contains(&format!("m('{pattern}'")),
+                "{}",
+                output.output
+            );
+        }
     }
 
     /// Device names remain literal strings in either quote style. Treating a
@@ -6106,6 +6162,27 @@ mod tests {
         let result = transpile("note(`${`bd sd!`}`)\ns(\"bd\")", &options);
         assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
         assert_eq!(result.output, "note(`${`bd sd!`}`);\ns(m('bd', 22));");
+    }
+
+    #[test]
+    fn large_comment_regions_do_not_become_statements_or_change_lane_locations() {
+        let padding = "// disabled: s(\"bd\").gain(.5)\n".repeat(1024);
+        let source = format!("{padding}first: s(\"bd\");\n{padding}second: s(\"sd\");\n{padding}");
+        let statements = scan_statements(&source, false);
+        assert_eq!(statements.len(), 2, "comments are not code statements");
+        assert_eq!(statements[0].start, padding.len());
+        assert_eq!(statements[1].start, source.find("second:").unwrap());
+        assert!(scan_statements(&padding, false).is_empty());
+        let lanes = lane_statements(&source).expect("within the nesting limit");
+        assert_eq!(lanes.len(), 2);
+        assert_eq!((&*lanes[0].label, lanes[0].line), ("first", 1025));
+        assert_eq!((&*lanes[1].label, lanes[1].line), ("second", 2050));
+        assert_eq!(lanes[0].body, "s(\"bd\")");
+        assert_eq!(lanes[1].body, "s(\"sd\")");
+        let result = transpile(&source, &TranspileOptions::default());
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(result.output.contains(".p('first', 0)"));
+        assert!(result.output.contains(".p('second', 1)"));
     }
 
     /// A line ending on the dot of a chain, an operator or a comma is not

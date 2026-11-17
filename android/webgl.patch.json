@@ -1,0 +1,306 @@
+{
+  "originalSha256": "ad34fa74eea7fae60609901aa3ed7508bb5c208ef1314b983a40d7d40cb1a667",
+  "patchedSha256": "156baa2b5dbcc8a19bdd6f9134dfa0e4150ecc6fb426fc129d50884fd332d08d",
+  "edits": [
+    {
+      "start": 24048,
+      "end": 24049,
+      "insertBase64": "NA=="
+    },
+    {
+      "start": 24981,
+      "end": 25008,
+      "insertBase64": "bGF5b3V0IChsb2NhdGlvbiA9IDcpIGluIHZlYzMgYV90aW50"
+    },
+    {
+      "start": 25011,
+      "end": 25032,
+      "insertBase64": "XG51bmlmb3JtIG1hdDQgdV9wcm9qZWM="
+    },
+    {
+      "start": 25039,
+      "end": 25044,
+      "insertBase64": "dW5pZm9ybQ=="
+    },
+    {
+      "start": 25050,
+      "end": 25060,
+      "insertBase64": "dV9yZXNvbHV0aW9u"
+    },
+    {
+      "start": 25063,
+      "end": 25063,
+      "insertBase64": "XG5vdXQgdmVjMiB2X3RleGNvb3JkO1xu"
+    },
+    {
+      "start": 25088,
+      "end": 25090,
+      "insertBase64": "ZmxhdCBvdXQg"
+    },
+    {
+      "start": 25091,
+      "end": 25106,
+      "insertBase64": "ZWMz"
+    },
+    {
+      "start": 25108,
+      "end": 25185,
+      "insertBase64": "X3RpbnQ="
+    },
+    {
+      "start": 25188,
+      "end": 25206,
+      "insertBase64": "XG52b2lkIG1haW4oKSB7XG4gIHZlYzIgemVyb1RvT25lID0gKGFfb2Zmc2V0IC8gdV9yZXNvbHV0aW9uKSArIGFfY2VsbA=="
+    },
+    {
+      "start": 25207,
+      "end": 25216,
+      "insertBase64": "b3MgKyAoYV91bml0cXVhZA=="
+    },
+    {
+      "start": 25219,
+      "end": 25224,
+      "insertBase64": "YV9zaQ=="
+    },
+    {
+      "start": 25226,
+      "end": 25243,
+      "insertBase64": ""
+    },
+    {
+      "start": 25249,
+      "end": 25249,
+      "insertBase64": "Z2xfUG9zaXRpb24gPSB1X3Byb2plY3Rpb24gKiB2ZWM0KHplcm9Ub09uZSwgMC4wLCAxLjApO1xuICA="
+    },
+    {
+      "start": 25275,
+      "end": 25275,
+      "insertBase64": "O1xuICB2X3RpbnQgPSBhX3RpbnQ="
+    },
+    {
+      "start": 25556,
+      "end": 25556,
+      "insertBase64": "ZmxhdCBpbiB2ZWMzIHZfdGludDtcbg=="
+    },
+    {
+      "start": 25717,
+      "end": 25717,
+      "insertBase64": "XG4gIG91dENvbG9yLnJnYiAqPSB2X3RpbnQ7"
+    },
+    {
+      "start": 27613,
+      "end": 27613,
+      "insertBase64": "LDEpLGwuZW5hYmxlVmVydGV4QXR0cmliQXJyYXkoNyksbC52ZXJ0ZXhBdHRyaWJQb2ludGVyKDcsMyxsLkZMT0FULCExLGgsMTEqRmxvYXQzMkFycmF5LkJZVEVTX1BFUl9FTEVNRU5UKSxsLnZlcnRleEF0dHJpYkRpdmlzb3IoNw=="
+    },
+    {
+      "start": 28643,
+      "end": 28643,
+      "insertBase64": "Y29uc3QgdGludD10aGlzLl9hdGxhcyYmdGhpcy5fYXRsYXMuX2NvbmZpZy5hbGxvd1RyYW5zcGFyZW5jeSYmdGhpcy5fYXRsYXMuX2NvbmZpZy5taW5pbXVtQ29udHJhc3RSYXRpbz09PTEmJjA9PT1oJiY1MDMzMTY0OD09PShvJjUwMzMxNjQ4KSYmIShvJjY3MTA4ODY0KSYmKChzPj0zMyYmczw9MTI2KXx8KHM+PTk0NzImJnM8PTk2MzEpfHwocz49MTAyNDAmJnM8PTEwNDk1KSkmJighZnx8Zi5sZW5ndGg9PT0xKTtjb25zdCBnbHlwaEZnPXRpbnQ/b3wxNjc3NzIxNTpvOw=="
+    },
+    {
+      "start": 28720,
+      "end": 28720,
+      "insertBase64": "ZVt1KzExXT10aW50Pygobz4+PjE2KSYyNTUpLzI1NToxLGVbdSsxMl09dGludD8oKG8+Pj44KSYyNTUpLzI1NToxLGVbdSsxM109dGludD8obyYyNTUpLzI1NToxLA=="
+    },
+    {
+      "start": 28783,
+      "end": 28784,
+      "insertBase64": "Z2x5cGhGZw=="
+    },
+    {
+      "start": 28849,
+      "end": 28850,
+      "insertBase64": "Z2x5cGhGZw=="
+    },
+    {
+      "start": 30045,
+      "end": 30050,
+      "insertBase64": "OQ=="
+    },
+    {
+      "start": 31286,
+      "end": 31286,
+      "insertBase64": "KA=="
+    },
+    {
+      "start": 31347,
+      "end": 31347,
+      "insertBase64": "fHx0aGlzLl9hdGxhcy5wYWdlc1tlXS5jYW52YXMhPT10aGlzLl9hdGxhc1RleHR1cmVzW2VdLmNhbnZhcyk="
+    },
+    {
+      "start": 31393,
+      "end": 31419,
+      "insertBase64": "Zm9yKGxldCBlPXRoaXMuX2F0bGFzLnBhZ2VzLmxlbmd0aDtlPHRoaXMuX2F0bGFz"
+    },
+    {
+      "start": 31420,
+      "end": 31429,
+      "insertBase64": "ZXh0dXJlcy5sZW5ndGg7ZSsrKXtjb25zdCBpPXRoaXMuX2F0bGFz"
+    },
+    {
+      "start": 31430,
+      "end": 31449,
+      "insertBase64": "ZXh0dXJlc1tlXTtpLmNhbnZhcyYmKHQuYWN0aXZl"
+    },
+    {
+      "start": 31450,
+      "end": 31512,
+      "insertBase64": ""
+    },
+    {
+      "start": 31518,
+      "end": 31579,
+      "insertBase64": "KHQ="
+    },
+    {
+      "start": 31589,
+      "end": 31593,
+      "insertBase64": "ZSksdA=="
+    },
+    {
+      "start": 31606,
+      "end": 31607,
+      "insertBase64": "dA=="
+    },
+    {
+      "start": 31619,
+      "end": 31631,
+      "insertBase64": "aS50"
+    },
+    {
+      "start": 31637,
+      "end": 31641,
+      "insertBase64": "KSx0"
+    },
+    {
+      "start": 31645,
+      "end": 31668,
+      "insertBase64": "SW1hZ2UyRCh0"
+    },
+    {
+      "start": 31680,
+      "end": 31803,
+      "insertBase64": ""
+    },
+    {
+      "start": 31805,
+      "end": 31806,
+      "insertBase64": "dA=="
+    },
+    {
+      "start": 31812,
+      "end": 31813,
+      "insertBase64": "MSwxLDAsdA=="
+    },
+    {
+      "start": 31819,
+      "end": 31820,
+      "insertBase64": "dA=="
+    },
+    {
+      "start": 31835,
+      "end": 31837,
+      "insertBase64": "bnVsbCksdC5nZW5lcmF0ZU1p"
+    },
+    {
+      "start": 31838,
+      "end": 31866,
+      "insertBase64": "bWE="
+    },
+    {
+      "start": 31867,
+      "end": 31872,
+      "insertBase64": "KHQ="
+    },
+    {
+      "start": 31885,
+      "end": 31896,
+      "insertBase64": "aS52ZXJzaW9uPS0xLGkuY2FudmFzPXZvaWQgMCl9dC5kcmF3RWxlbWVudHNJbnN0YW5jZWQodC4="
+    },
+    {
+      "start": 31897,
+      "end": 31897,
+      "insertBase64": "UklBTkdMRV9TVFJJUCw0LHQuVU5TSUdORURfQllURSwwLHMvbCl9c2V0QXRsYXMoZSl7dGhpcy5fYXRsYXM9ZTtmb3IoY29uc3QgZSBvZiB0aGlzLl9hdGxhc1Q="
+    },
+    {
+      "start": 31904,
+      "end": 31904,
+      "insertBase64": "KWUudmVyc2lvbj0tMX1fYmluZEF0bGFzUGFnZVRleHR1cmUoZSx0LGkpe2UuYWN0aXZlVGV4dHVyZShlLlRFWFRVUkUwK2kpLGUuYmluZFRleHR1cmUoZS5URVhUVVJFXzJELHRoaXMuX2F0bGFzVGV4dHVyZXM="
+    },
+    {
+      "start": 31908,
+      "end": 31908,
+      "insertBase64": "dGV4dHVyZSksZS50ZXhQYXJhbWV0ZXJpKGUuVEVYVFVSRV8yRCxlLlRFWFRVUkVfV1JBUF9TLGUuQ0xBTVBfVE9fRURHRSksZS50ZXhQYXJhbWV0ZXJpKGUuVEVYVFVSRV8yRCxlLlRFWFRVUkVfV1JBUF9ULGUuQ0xBTVBfVE9fRURHRSksZS50ZXhJbWFnZTJEKGUuVEVYVFVSRV8yRCwwLGUuUkdCQSxlLlJHQkEsZS5VTlNJR05FRF9CWVRFLHQucGFnZXNbaV0uY2Fu"
+    },
+    {
+      "start": 31909,
+      "end": 31918,
+      "insertBase64": "YXMpLGUuZ2VuZXJhdGVNaQ=="
+    },
+    {
+      "start": 31919,
+      "end": 31921,
+      "insertBase64": "bWFwKGUuVEVYVFVSRV8yRCksdGhpcy5fYXRsYXNUZXh0dXI="
+    },
+    {
+      "start": 31934,
+      "end": 31934,
+      "insertBase64": "PXQucGFnZXNbaV0udmVyc2lvbix0aGlzLl9hdGxhc1RleHR1cmVzW2ldLmNhbnZhcz10LnBhZ2VzW2ldLmNhbnZhcw=="
+    },
+    {
+      "start": 40869,
+      "end": 40869,
+      "insertBase64": "dGhpcy5fcGFnZXMuc29tZShlPT4="
+    },
+    {
+      "start": 40873,
+      "end": 40887,
+      "insertBase64": "ZQ=="
+    },
+    {
+      "start": 40906,
+      "end": 40906,
+      "insertBase64": "ZS5jdXJyZW50Um93LnkpKXtjb25zdCBlPQ=="
+    },
+    {
+      "start": 40920,
+      "end": 40928,
+      "insertBase64": "O2Zvcihjb25zdCB0IG9mIHRoaXMuX3BhZ2VzLnNsaWNlKDEpKXRoaXMuX29u"
+    },
+    {
+      "start": 40929,
+      "end": 40930,
+      "insertBase64": "ZW1vdmVUZXh0dXJlQXRsYXNDYW52YXMuZmlyZSh0LmNhbnZhcyksdC5jYW52YXMu"
+    },
+    {
+      "start": 40931,
+      "end": 40950,
+      "insertBase64": "aWR0aD0wLHQuY2FudmFzLmhlaWdodD0wLHQuY2FudmFzLnJlbW92ZSgpOw=="
+    },
+    {
+      "start": 40961,
+      "end": 40971,
+      "insertBase64": "Lmxlbmd0aD0xO2UuY2FudmFzLndpZHRoIT09dGhpcy5fdGV4dHVyZVNpemUmJihlLmNhbnZhcy53aWR0aD10aGlzLl90ZXh0dXJlU2l6ZSxlLmNhbnZhcy5oZWlnaHQ9dGhpcy5fdGV4dHVyZVNpemUpO2UuY2xlYXIoKTt0aGlzLl9hY3RpdmVQYWdlcz1bZV07dGhpcy5fb3ZlcmZsb3dTaXplUGFnZT12b2lkIDA="
+    },
+    {
+      "start": 42826,
+      "end": 42844,
+      "insertBase64": "Y29uc3QgYT10aGlzLl9jb25maWcuYWxsb3dUcmFuc3BhcmVuY3kmJjE9PT10aGlzLl9jb25maWcubWluaW11bUNvbnRyYXN0UmF0aW8mJiEoNjcxMDg4NjQmcyk/aSYtNjcxMDg4NjQ6aTtyZXR1cm4gXz1lLmdldCh0LGE="
+    },
+    {
+      "start": 42895,
+      "end": 42896,
+      "insertBase64": "YQ=="
+    },
+    {
+      "start": 55690,
+      "end": 55690,
+      "insertBase64": "PTAsdGhpcy5fZ2x5cGhzLmxlbmd0aD0wLHRoaXMuX3VzZWRQaXhlbHM="
+    },
+    {
+      "start": 247495,
+      "end": 247496,
+      "insertBase64": ""
+    }
+  ]
+}

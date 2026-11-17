@@ -1638,6 +1638,13 @@ fn pattern_methods_on_value_callbacks(source: &str) -> Vec<(usize, usize, String
     let mut found = Vec::new();
     let mut index = 0usize;
     while index < bytes.len() {
+        // Comments and strings are blanked in place. Skip their whitespace
+        // once, including a trailing blank region, rather than asking ident_at
+        // to scan the same suffix again after each one-byte failed step.
+        index = scan::space_after(&code, index);
+        if index == bytes.len() {
+            break;
+        }
         let Some((start, end)) = ident_at(&code, index) else {
             index += 1;
             continue;
@@ -3489,6 +3496,21 @@ $: note("c").gain(local).sometimes(pat => pat.rev())
         );
     }
 
+    #[test]
+    fn value_callback_checks_cross_large_blanked_regions_and_keep_source_spans() {
+        let padding = "// disabled: filterValues(x => x.log())\n".repeat(2048);
+        let source = format!(
+            "{padding}; s(\"bd\").filterValues(x => x.log());\n{padding}; s(\"sd\").fmap(v => v.log());\n{padding}"
+        );
+        let found = pattern_methods_on_value_callbacks(&source);
+        assert_eq!(found.len(), 2);
+        assert_eq!(&source[found[0].0..found[0].1], "log");
+        assert_eq!((&*found[0].2, &*found[0].3), ("x", "filterValues"));
+        assert_eq!(&source[found[1].0..found[1].1], "log");
+        assert_eq!((&*found[1].2, &*found[1].3), ("v", "fmap"));
+        assert!(pattern_methods_on_value_callbacks(&padding).is_empty());
+    }
+
     /// `filterValues` receives a hap VALUE. `.log()` on that value throws
     /// `not a function`; the checker used to allow it because `log` is a
     /// known pattern method.
@@ -4585,6 +4607,25 @@ $: keys(".5").filterValues(x => x.log()).s("hh:4")"#;
         }
         // A closed string is nobody's problem.
         assert!(check("samples('github:tidalcycles/dirt-samples')").is_empty());
+    }
+
+    #[test]
+    fn sample_map_urls_are_not_linted_as_mini_notation() {
+        let source = r#"samples({ "kick one": ["https://example.test/kick%20one.wav"], bass: `https://example.test/bass.wav` })
+        $: s("bd hh")"#;
+        let diagnostics = check(source);
+        assert!(
+            diagnostics
+                .iter()
+                .all(|finding| finding.level != Level::Syntax),
+            "{diagnostics:?}"
+        );
+        let broken = format!("{source}\n$: s(\"[\")");
+        assert!(
+            check(&broken)
+                .iter()
+                .any(|finding| { finding.level == Level::Syntax && finding.from >= source.len() })
+        );
     }
 
     /// The score as written on strudel.cc: a lane whose chain breaks after

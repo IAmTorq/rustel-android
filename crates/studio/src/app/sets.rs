@@ -877,16 +877,32 @@ impl App {
         }
         let root = self.sets_root();
         let picker = match prompt {
-            SetPrompt::OpenSet => FilePicker::new(
-                "open a set or a Strudel export",
-                "opens it",
-                set_candidates(&root, self.scenes.directory())
+            SetPrompt::OpenSet => {
+                let candidates = set_candidates(&root, self.scenes.directory())
                     .into_iter()
                     .chain(export_candidates(&root))
-                    .collect(),
-                &root,
-            )
-            .choosing_folders(),
+                    .collect::<Vec<_>>();
+                #[cfg(target_os = "android")]
+                let candidates = {
+                    let mut list = candidates;
+                    list.insert(
+                        0,
+                        Candidate {
+                            label: "Downloads…".into(),
+                            detail: "Android file picker · open a score or pattern export".into(),
+                            path: PathBuf::from(crate::android_pattern_import::DOWNLOADS),
+                        },
+                    );
+                    list
+                };
+                FilePicker::new(
+                    "open a set or a Strudel export",
+                    "opens it",
+                    candidates,
+                    &root,
+                )
+                .choosing_folders()
+            }
             SetPrompt::OpenRecent => {
                 let current = absolute_set(self.scenes.directory());
                 // A relative entry is from a studio that kept the path as
@@ -902,12 +918,28 @@ impl App {
                     .collect();
                 FilePicker::new("open a recent set", "opens it", recent, &root).choosing_folders()
             }
-            SetPrompt::ImportStrudel => FilePicker::new(
-                "import Strudel patterns",
-                "adds them to this set",
-                export_candidates(&root),
-                &root,
-            ),
+            SetPrompt::ImportStrudel => {
+                let candidates = export_candidates(&root);
+                #[cfg(target_os = "android")]
+                let candidates = {
+                    let mut list = candidates;
+                    list.insert(
+                        0,
+                        Candidate {
+                            label: "Downloads…".into(),
+                            detail: "Android file picker · import into this set".into(),
+                            path: PathBuf::from(crate::android_pattern_import::DOWNLOADS),
+                        },
+                    );
+                    list
+                };
+                FilePicker::new(
+                    "import Strudel patterns",
+                    "adds them to this set",
+                    candidates,
+                    &root,
+                )
+            }
             SetPrompt::ImportMidi => FilePicker::new(
                 "import a MIDI file",
                 "opens it as a new scene",
@@ -1202,6 +1234,16 @@ impl App {
 
     /// Open another set: a folder, or a score and its folder.
     fn open_set_at(&mut self, path: &std::path::Path) {
+        #[cfg(target_os = "android")]
+        if path == std::path::Path::new(crate::android_pattern_import::DOWNLOADS) {
+            if let Err(error) = crate::android_pattern_import::open_downloads(
+                crate::android_pattern_import::Mode::Open,
+            ) && let Some((_, picker)) = self.set_prompt.as_mut()
+            {
+                picker.error = Some(error);
+            }
+            return;
+        }
         // A Strudel pattern export - a .json object of scores - is not a
         // set on disk but the makings of one. The set's own file is a .json
         // too, and stays a refusal.
@@ -1225,6 +1267,47 @@ impl App {
             Err(error) => {
                 if let Some((_, picker)) = self.set_prompt.as_mut() {
                     picker.error = Some(error.to_string());
+                }
+            }
+        }
+    }
+
+    /// Android documents are copied into a durable set before their temporary
+    /// transfer file is removed. Never keep an open score in Android's cache.
+    #[cfg(target_os = "android")]
+    pub(super) fn open_android_document(&mut self, path: &std::path::Path, filename: &str) {
+        let read = || -> Result<SceneSet, String> {
+            let text = std::fs::read_to_string(path)
+                .map_err(|e| format!("cannot read {filename}: {e}"))?;
+            let filename = std::path::Path::new(filename);
+            let stem = filename.file_stem().unwrap_or_default().to_string_lossy();
+            let name = crate::scenes::sanitize_name(&stem)
+                .unwrap_or_else(|| "Downloaded pattern".to_owned());
+            let extension = filename
+                .extension()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_ascii_lowercase();
+            let scores =
+                match extension.as_str() {
+                    "json" => strudel_scores(strudel_export(&text)?),
+                    "strudel" | "js" | "txt" => vec![(name.clone(), text)],
+                    _ => return Err(
+                        "Choose a .strudel, .js or .txt score, or a .json Strudel pattern export"
+                            .into(),
+                    ),
+                };
+            SceneSet::import_in(&self.sets_root(), &name, &scores)
+                .map_err(|e| format!("cannot open {name}: {e}"))
+        };
+        match read() {
+            Ok(set) => {
+                self.close_set_prompt();
+                self.switch_set(set, "opened set");
+            }
+            Err(error) => {
+                if let Some((_, picker)) = self.set_prompt.as_mut() {
+                    picker.error = Some(error);
                 }
             }
         }
@@ -1274,7 +1357,17 @@ impl App {
     /// second time and says so. A name that holds other code goes on to
     /// `name 2`, `name 3` and so on, the way the folder import keeps two
     /// names apart, and nothing is overwritten.
-    fn import_strudel_into_current(&mut self, path: &std::path::Path) {
+    pub(super) fn import_strudel_into_current(&mut self, path: &std::path::Path) {
+        #[cfg(target_os = "android")]
+        if path == std::path::Path::new(crate::android_pattern_import::DOWNLOADS) {
+            if let Err(error) = crate::android_pattern_import::open_downloads(
+                crate::android_pattern_import::Mode::Import,
+            ) && let Some((_, picker)) = self.set_prompt.as_mut()
+            {
+                picker.error = Some(error);
+            }
+            return;
+        }
         let report = |app: &mut Self, error: String| {
             if let Some((_, picker)) = app.set_prompt.as_mut() {
                 picker.error = Some(error);

@@ -255,13 +255,15 @@ mod classification_tests {
                 VoiceError::InvalidControl(_)
             ));
         }
-        assert!(matches!(
-            refusal(
-                &json!({ "s": "fixture", "begin": 0.75, "end": 0.25 }),
-                &Lookup::Found
-            ),
-            VoiceError::InvalidControl(message) if message.contains("ends before it starts")
-        ));
+        for (begin, end) in [(0.75, 0.25), (1.0, 1.0)] {
+            assert!(matches!(
+                refusal(
+                    &json!({ "s": "fixture", "begin": begin, "end": end }),
+                    &Lookup::Found
+                ),
+                VoiceError::InvalidControl(message) if message.contains("ends before it starts")
+            ));
+        }
     }
 
     #[test]

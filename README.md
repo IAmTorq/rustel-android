@@ -1,3 +1,5 @@
+> **Android development fork:** See [ANDROID.md](ANDROID.md) for the unofficial port, build instructions, known issues and test status. Android work is on `android-port`; this is not a stable Android release.
+
 <div align="center">
 
 <picture>

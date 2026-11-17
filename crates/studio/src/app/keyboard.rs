@@ -559,6 +559,46 @@ impl App {
         mut terminal_event: Event,
         allow_modal_keys: bool,
     ) -> Result<(), RuntimeError> {
+        #[cfg(target_os = "android")]
+        if let Event::Key(key) = &terminal_event {
+            if crate::android_pattern_import::completion(key) {
+                if let Some(document) = crate::android_pattern_import::take() {
+                    // Never paste a returned path into an editor or a different prompt.
+                    match (
+                        document.mode,
+                        self.set_prompt.as_ref().map(|(prompt, _)| *prompt),
+                    ) {
+                        (
+                            crate::android_pattern_import::Mode::Import,
+                            Some(SetPrompt::ImportStrudel),
+                        ) => {
+                            self.import_strudel_into_current(&document.path);
+                            // The picker has one error line. A private staging path
+                            // would hide the useful parse error on a phone screen.
+                            if let Some((_, picker)) = self.set_prompt.as_mut()
+                                && let Some(error) = picker.error.as_mut()
+                                && let Some(message) =
+                                    error.strip_prefix(&format!("{}: ", document.path.display()))
+                            {
+                                *error = message.to_owned();
+                            }
+                        }
+                        (crate::android_pattern_import::Mode::Open, Some(SetPrompt::OpenSet)) => {
+                            self.open_android_document(&document.path, &document.name)
+                        }
+                        _ => {}
+                    }
+                    let _ = std::fs::remove_file(document.path);
+                }
+                self.dirty_frame = true;
+                return Ok(());
+            }
+            if let Some(action) = crate::android_controls::action(key) {
+                self.dispatch_bind_action(action, false)?;
+                crate::android_controls::set_piano(self.piano.open);
+                return Ok(());
+            }
+        }
         if let Event::Key(key) = &mut terminal_event {
             self.keybinds.normalize_terminal_key(key);
         }

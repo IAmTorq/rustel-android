@@ -1,0 +1,119 @@
+--- a/addons/addon-webgl/src/GlyphRenderer.ts
++++ b/addons/addon-webgl/src/GlyphRenderer.ts
+@@ -31,7 +31,8 @@
+   SIZE = 3,
+   TEXPAGE = 4,
+   TEXCOORD = 5,
+-  TEXSIZE = 6
++  TEXSIZE = 6,
++  TINT = 7
+ }
+ 
+ const vertexShaderSource = `#version 300 es
+@@ -42,17 +43,20 @@
+ layout (location = ${VertexAttribLocations.TEXPAGE}) in float a_texpage;
+ layout (location = ${VertexAttribLocations.TEXCOORD}) in vec2 a_texcoord;
+ layout (location = ${VertexAttribLocations.TEXSIZE}) in vec2 a_texsize;
++layout (location = ${VertexAttribLocations.TINT}) in vec3 a_tint;
+ 
+ uniform mat4 u_projection;
+ uniform vec2 u_resolution;
+ 
+ out vec2 v_texcoord;
+ flat out int v_texpage;
++flat out vec3 v_tint;
+ 
+ void main() {
+   vec2 zeroToOne = (a_offset / u_resolution) + a_cellpos + (a_unitquad * a_size);
+   gl_Position = u_projection * vec4(zeroToOne, 0.0, 1.0);
+   v_texpage = int(a_texpage);
++  v_tint = a_tint;
+   v_texcoord = a_texcoord + a_unitquad * a_texsize;
+ }`;
+ 
+@@ -66,6 +70,7 @@
+ 
+ in vec2 v_texcoord;
+ flat in int v_texpage;
++flat in vec3 v_tint;
+ 
+ uniform sampler2D u_texture[${maxFragmentShaderTextureUnits}];
+ 
+@@ -75,12 +80,12 @@
+   if (v_texpage == 0) {
+     outColor = texture(u_texture[0], v_texcoord);
+   } ${textureConditionals}
++  outColor.rgb *= v_tint;
+ }`);
+ }
+ 
+-const INDICES_PER_CELL = 11;
++const INDICES_PER_CELL = 14;
+ const BYTES_PER_CELL = INDICES_PER_CELL * Float32Array.BYTES_PER_ELEMENT;
+-const CELL_POSITION_INDICES = 2;
+ 
+ // Work variables to avoid garbage collection
+ let $i = 0;
+@@ -178,6 +183,10 @@
+     gl.vertexAttribPointer(VertexAttribLocations.CELL_POSITION, 2, gl.FLOAT, false, BYTES_PER_CELL, 9 * Float32Array.BYTES_PER_ELEMENT);
+     gl.vertexAttribDivisor(VertexAttribLocations.CELL_POSITION, 1);
+ 
++    gl.enableVertexAttribArray(VertexAttribLocations.TINT);
++    gl.vertexAttribPointer(VertexAttribLocations.TINT, 3, gl.FLOAT, false, BYTES_PER_CELL, 11 * Float32Array.BYTES_PER_ELEMENT);
++    gl.vertexAttribDivisor(VertexAttribLocations.TINT, 1);
++
+     // Setup static uniforms
+     gl.useProgram(this._program);
+     const textureUnits = new Int32Array(TextureAtlas.maxAtlasPages);
+@@ -222,12 +231,21 @@
+   }
+ 
+   private _updateCell(array: Float32Array, x: number, y: number, code: number | undefined, bg: number, fg: number, ext: number, chars: string, width: number, lastBg: number): void {
++    // RGB ASCII/braille have one foreground color and no color emoji or
++    // extended underline colors. Cache their white mask and tint on the GPU.
++    // Other glyphs/styles retain the upstream colored-glyph path.
++    const config = (this._atlas as TextureAtlas | undefined)?.config;
++    const tint = config?.allowTransparency && config.minimumContrastRatio === 1 &&
++      ext === 0 && (fg & 0x3000000) === 0x3000000 && !(fg & 0x4000000) &&
++      code !== undefined && ((code >= 33 && code <= 126) || (code >= 0x2500 && code <= 0x259f) || (code >= 0x2800 && code <= 0x28ff)) &&
++      (!chars || chars.length === 1);
++    const glyphFg = tint ? fg | 0xffffff : fg;
+     $i = (y * this._terminal.cols + x) * INDICES_PER_CELL;
+ 
+     // Exit early if this is a null character, allow space character to continue as it may have
+     // underline/strikethrough styles
+     if (code === NULL_CELL_CODE || code === undefined/* This is used for the right side of wide chars */) {
+-      array.fill(0, $i, $i + INDICES_PER_CELL - 1 - CELL_POSITION_INDICES);
++      array.fill(0, $i, $i + 9);
+       return;
+     }
+ 
+@@ -235,11 +253,15 @@
+       return;
+     }
+ 
++    array[$i + 11] = tint ? ((fg >>> 16) & 255) / 255 : 1;
++    array[$i + 12] = tint ? ((fg >>> 8) & 255) / 255 : 1;
++    array[$i + 13] = tint ? (fg & 255) / 255 : 1;
++
+     // Get the glyph
+     if (chars && chars.length > 1) {
+-      $glyph = this._atlas.getRasterizedGlyphCombinedChar(chars, bg, fg, ext, false, this._terminal.element);
++      $glyph = this._atlas.getRasterizedGlyphCombinedChar(chars, bg, glyphFg, ext, false, this._terminal.element);
+     } else {
+-      $glyph = this._atlas.getRasterizedGlyph(code, bg, fg, ext, false, this._terminal.element);
++      $glyph = this._atlas.getRasterizedGlyph(code, bg, glyphFg, ext, false, this._terminal.element);
+     }
+ 
+     $leftCellPadding = Math.floor((this._dimensions.device.cell.width - this._dimensions.device.char.width) / 2);
+--- a/addons/addon-webgl/src/TextureAtlas.ts
++++ b/addons/addon-webgl/src/TextureAtlas.ts
+@@ -101,6 +101,8 @@
+       willReadFrequently: true
+     }));
+   }
++
++  public get config(): ICharAtlasConfig { return this._config; }
+ 
+   public dispose(): void {
+     this._tmpCanvas.remove();

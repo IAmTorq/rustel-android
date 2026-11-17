@@ -130,6 +130,15 @@ impl<W: Write> Backend for StudioBackend<W> {
     }
 
     fn window_size(&mut self) -> io::Result<WindowSize> {
+        #[cfg(target_os = "android")]
+        {
+            let (cols, rows) = crate::android_terminal::dimensions();
+            Ok(WindowSize {
+                columns_rows: Size::new(cols, rows),
+                pixels: Size::new(0, 0),
+            })
+        }
+        #[cfg(not(target_os = "android"))]
         self.inner.window_size()
     }
 

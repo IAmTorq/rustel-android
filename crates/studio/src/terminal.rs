@@ -4,7 +4,9 @@
 //! single RAII transaction.  A normal return or an unwind restores the user's
 //! shell before the CLI reports an error.
 
-use std::io::{self, BufWriter, IsTerminal, Write};
+#[cfg(not(target_os = "android"))]
+use std::io::IsTerminal;
+use std::io::{self, BufWriter, Write};
 
 use crossterm::cursor::{Hide, MoveTo, SetCursorStyle, Show};
 use crossterm::event::{
@@ -12,10 +14,9 @@ use crossterm::event::{
     EnableFocusChange, EnableMouseCapture, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
     PushKeyboardEnhancementFlags,
 };
-use crossterm::terminal::{
-    Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
-    enable_raw_mode, supports_keyboard_enhancement,
-};
+use crossterm::terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
+#[cfg(not(target_os = "android"))]
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode, supports_keyboard_enhancement};
 use crossterm::{execute, queue};
 use ratatui::style::Color;
 use ratatui::{Terminal, buffer::Buffer};
@@ -230,10 +231,13 @@ impl TerminalFeatures {
     pub fn probe_now() -> Self {
         // Keep raw input throughout both queries. The standalone probe used
         // to skip the keyboard query and therefore always report false.
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "android")))]
         let _raw_mode = ProbeRawMode::enter();
+        #[cfg(not(target_os = "android"))]
         let keyboard =
             io::stdin().is_terminal() && matches!(supports_keyboard_enhancement(), Ok(true));
+        #[cfg(target_os = "android")]
+        let keyboard = true;
         let features = Self::detect(keyboard);
         #[cfg(windows)]
         {
@@ -262,12 +266,14 @@ impl TerminalFeatures {
         // panels keep only a `Theme` - reads it back through `symbol`.
         symbol_state::set(symbols);
         // Only the unix probe below writes answers back into the features.
-        #[cfg_attr(not(unix), allow(unused_mut))]
-        let mut features = Self {
+        let features = Self {
             name,
             truecolor,
-            keyboard: enhanced_keyboard,
-            sync_output: false,
+            // The Android host preserves modifier bits in its native key reports.
+            keyboard: enhanced_keyboard || cfg!(target_os = "android"),
+            // Our embedded xterm 6 supports DEC 2026. Unlike a desktop TTY,
+            // this host skips terminal probing, so declare it explicitly.
+            sync_output: cfg!(target_os = "android"),
             kitty_graphics: false,
             sixel: false,
             fine_glyphs,
@@ -277,22 +283,27 @@ impl TerminalFeatures {
         };
         // The probe owns stdin on unix; the Windows build does not ask, and
         // the probe's helpers stay unix-only beside this block.
-        #[cfg(unix)]
-        if let Some(answers) = ask_terminal() {
-            // The byte split and the held-key queue are Unix-only; the
-            // Windows probe path above never reads stdin itself.
-            #[cfg(unix)]
-            {
-                let (replies, keys) = split_probe_bytes(&answers);
-                features.apply_answers(parse_answers(&replies));
-                HELD_KEYS.with(|held| held.borrow_mut().extend(keys));
+        #[cfg(all(unix, not(target_os = "android")))]
+        let features = {
+            let mut features = features;
+            if let Some(answers) = ask_terminal() {
+                // The byte split and the held-key queue are Unix-only; the
+                // Windows probe path above never reads stdin itself.
+                #[cfg(unix)]
+                {
+                    let (replies, keys) = split_probe_bytes(&answers);
+                    features.apply_answers(parse_answers(&replies));
+                    HELD_KEYS.with(|held| held.borrow_mut().extend(keys));
+                }
+                #[cfg(not(unix))]
+                features.apply_answers(parse_answers(&answers));
             }
-            #[cfg(not(unix))]
-            features.apply_answers(parse_answers(&answers));
-        }
+            features
+        };
         features
     }
 
+    #[cfg(any(not(target_os = "android"), test))]
     fn apply_answers(&mut self, answers: Answers) {
         self.sync_output = answers.sync_output;
         self.kitty_graphics = answers.kitty_graphics;
@@ -309,10 +320,17 @@ impl TerminalFeatures {
 /// studio has it: cooked mode holds the answers for a newline that never
 /// comes and echoes their escapes at the screen.
 pub fn probe_terminal() -> TerminalFeatures {
-    let _ = enable_raw_mode();
-    let features = TerminalFeatures::probe_now();
-    let _ = disable_raw_mode();
-    features
+    #[cfg(target_os = "android")]
+    {
+        TerminalFeatures::detect(true)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = enable_raw_mode();
+        let features = TerminalFeatures::probe_now();
+        let _ = disable_raw_mode();
+        features
+    }
 }
 
 /// The endpoint talking to Rustel, before an inherited outer-terminal hint.
@@ -320,10 +338,10 @@ fn active_identity(name: &str) -> &str {
     name.split(" via ").next().unwrap_or(name)
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 struct ProbeRawMode(bool);
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 impl ProbeRawMode {
     fn enter() -> Self {
         Self(
@@ -334,7 +352,7 @@ impl ProbeRawMode {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 impl Drop for ProbeRawMode {
     fn drop(&mut self) {
         if self.0 {
@@ -1535,6 +1553,7 @@ impl Drop for ForceSymbolsForTest {
 }
 
 /// What the answers to the startup queries said.
+#[cfg(any(not(target_os = "android"), test))]
 #[derive(Debug, Default, PartialEq, Eq)]
 struct Answers {
     sync_output: bool,
@@ -1547,6 +1566,7 @@ struct Answers {
 
 /// Read complete replies independently of their arrival order. ConPTY can
 /// answer local queries before the outer terminal's forwarded replies arrive.
+#[cfg(any(not(target_os = "android"), test))]
 fn parse_answers(bytes: &[u8]) -> Answers {
     let text = String::from_utf8_lossy(bytes);
     let mut answers = Answers::default();
@@ -1602,7 +1622,7 @@ fn parse_answers(bytes: &[u8]) -> Answers {
     answers
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 thread_local! {
     /// Keys typed while the startup probe owned stdin, handed back to the
     /// reader one by one so they reach the editor exactly once.
@@ -1612,16 +1632,16 @@ thread_local! {
 
 /// The most characters a Kitty picture reply holds between its `ESC _`
 /// and its `ESC \`: an id, a placement and an error message.
-#[cfg(unix)]
+#[cfg(all(unix, any(not(target_os = "android"), test)))]
 const MAX_PICTURE_REPLY: usize = 256;
 
 /// How long the rest of a picture reply may take after its `ESC _`.
-#[cfg(unix)]
+#[cfg(all(unix, any(not(target_os = "android"), test)))]
 const PICTURE_REPLY_WAIT: std::time::Duration = std::time::Duration::from_millis(30);
 
 /// Whether `event` is `character` with Alt alone: how crossterm reads an
 /// `ESC` followed by that character.
-#[cfg(unix)]
+#[cfg(all(unix, any(not(target_os = "android"), test)))]
 fn is_alt_char(event: &crossterm::event::Event, character: char) -> bool {
     matches!(
         event,
@@ -1632,7 +1652,7 @@ fn is_alt_char(event: &crossterm::event::Event, character: char) -> bool {
 }
 
 /// The character a reply's body puts in `event`, if it is one.
-#[cfg(unix)]
+#[cfg(all(unix, any(not(target_os = "android"), test)))]
 fn reply_char(event: &crossterm::event::Event) -> Option<char> {
     use crossterm::event::{Event, KeyCode, KeyModifiers};
     match event {
@@ -1650,7 +1670,7 @@ fn reply_char(event: &crossterm::event::Event) -> Option<char> {
 
 /// Whether the events after an Alt+`_` spell the rest of a Kitty picture
 /// reply: `G`, its keys and message, and the closing Alt+`\`.
-#[cfg(unix)]
+#[cfg(all(unix, any(not(target_os = "android"), test)))]
 fn is_picture_reply(tail: &[crossterm::event::Event]) -> bool {
     let Some((last, body)) = tail.split_last() else {
         return false;
@@ -1663,7 +1683,7 @@ fn is_picture_reply(tail: &[crossterm::event::Event]) -> bool {
 /// typed while it ran. A key is a bare byte, or a CSI sequence a terminal
 /// never answers a capability query with: an arrow, home, end, or a `~`
 /// form. Everything else stays a reply, as the whole window was before.
-#[cfg(unix)]
+#[cfg(all(unix, any(not(target_os = "android"), test)))]
 fn split_probe_bytes(bytes: &[u8]) -> (Vec<u8>, Vec<crossterm::event::Event>) {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -1813,19 +1833,19 @@ fn split_probe_bytes(bytes: &[u8]) -> (Vec<u8>, Vec<crossterm::event::Event>) {
 /// shell's screen, where it stays after the studio quits. The cursor is
 /// saved before the questions and put back after them, and what they left
 /// is erased.
-#[cfg(any(unix, windows))]
+#[cfg(all(any(unix, windows), any(not(target_os = "android"), test)))]
 const TERMINAL_CAPABILITY_QUERY: &[u8] =
     b"\x1b7\x1b[?2026$p\x1b[?1016$p\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[16t\x1b[c\x1b8\x1b[J";
 
 /// A wait as poll(2)'s whole milliseconds, rounded up. A floor would turn
 /// the last sub-millisecond of each paced wait into a zero-timeout poll,
 /// and the loop would spin until the frame is due.
-#[cfg(unix)]
+#[cfg(all(unix, any(not(target_os = "android"), test)))]
 fn poll_millis(wait: std::time::Duration) -> i32 {
     i32::try_from(wait.as_nanos().div_ceil(1_000_000)).unwrap_or(i32::MAX)
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 fn ask_terminal() -> Option<Vec<u8>> {
     use std::os::unix::io::AsRawFd;
     let stdin = io::stdin();
@@ -1955,7 +1975,7 @@ fn windows_terminal_input(features: &mut TerminalFeatures) -> Option<windows_inp
 }
 
 /// The window size the terminal reports.
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 fn window_now() -> Option<libc::winsize> {
     let mut size = libc::winsize {
         ws_row: 0,
@@ -1974,19 +1994,33 @@ fn window_now() -> Option<libc::winsize> {
 /// where it reports none (an old terminal, a multiplexer).
 #[cfg(unix)]
 pub fn cell_pixels_now() -> Option<(u16, u16)> {
-    let size = window_now()?;
-    cell_pixels_from_window(size.ws_col, size.ws_row, size.ws_xpixel, size.ws_ypixel)
+    #[cfg(target_os = "android")]
+    {
+        None
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let size = window_now()?;
+        cell_pixels_from_window(size.ws_col, size.ws_row, size.ws_xpixel, size.ws_ypixel)
+    }
 }
 
 /// The columns and the rows of the terminal. `None` when the stream of the
 /// process start gives no size.
 #[cfg(unix)]
 fn size_now() -> Option<(u16, u16)> {
-    let size = window_now()?;
-    (size.ws_col > 0 && size.ws_row > 0).then_some((size.ws_col, size.ws_row))
+    #[cfg(target_os = "android")]
+    {
+        Some(crate::android_terminal::dimensions())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let size = window_now()?;
+        (size.ws_col > 0 && size.ws_row > 0).then_some((size.ws_col, size.ws_row))
+    }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, any(not(target_os = "android"), test)))]
 fn cell_pixels_from_window(columns: u16, rows: u16, width: u16, height: u16) -> Option<(u16, u16)> {
     let cell_width = width.checked_div(columns)?;
     let cell_height = height.checked_div(rows)?;
@@ -2010,7 +2044,7 @@ pub struct TerminalSession {
     /// dropped, its tab hung up. Sticky, because a terminal does not come
     /// back and because nothing may touch the input again once it has -
     /// see [`Self::poll_event`].
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "android")))]
     hung_up: std::cell::Cell<bool>,
     /// The terminal answered a picture that asked for no answer. Sticky:
     /// a terminal that does it once does it for every frame.
@@ -2086,6 +2120,7 @@ fn queue_terminal_entry(
 impl TerminalSession {
     pub fn enter() -> io::Result<Self> {
         let out = rustel_runtime::stdio::out();
+        #[cfg(not(target_os = "android"))]
         if !io::stdin().is_terminal() || !out.is_terminal() {
             return Err(io::Error::new(
                 io::ErrorKind::Unsupported,
@@ -2097,6 +2132,7 @@ impl TerminalSession {
             FRAME_OUTPUT_CAPACITY,
             out.stream()?,
         )))?;
+        #[cfg(not(target_os = "android"))]
         enable_raw_mode()?;
 
         // Set `entered` before emitting any protocol sequence so a partial
@@ -2108,7 +2144,7 @@ impl TerminalSession {
             cursor_color: None,
             cursor_shape: None,
             entered: true,
-            #[cfg(unix)]
+            #[cfg(all(unix, not(target_os = "android")))]
             hung_up: std::cell::Cell::new(false),
             #[cfg(unix)]
             pictures_answered: std::cell::Cell::new(false),
@@ -2117,7 +2153,16 @@ impl TerminalSession {
             #[cfg(windows)]
             input_cell_pixels: std::cell::Cell::new(None),
         };
-        session.enhanced_keyboard = matches!(supports_keyboard_enhancement(), Ok(true));
+        #[cfg(not(target_os = "android"))]
+        {
+            session.enhanced_keyboard = matches!(supports_keyboard_enhancement(), Ok(true));
+        }
+        // The Android host emits precise key events directly; it is not a
+        // Unix tty, and xterm.js does not negotiate Kitty keyboard mode.
+        #[cfg(target_os = "android")]
+        {
+            session.enhanced_keyboard = false;
+        }
         session.features = TerminalFeatures::detect(session.enhanced_keyboard);
         #[cfg(windows)]
         {
@@ -2200,6 +2245,11 @@ impl TerminalSession {
     /// silence, then what is owed to disk, then out.
     #[cfg(unix)]
     pub fn hung_up(&self) -> bool {
+        #[cfg(target_os = "android")]
+        {
+            crate::android_terminal::closed()
+        }
+        #[cfg(not(target_os = "android"))]
         self.hung_up.get()
     }
 
@@ -2209,7 +2259,7 @@ impl TerminalSession {
     }
 
     /// `POLLHUP` on the input, asked with no wait at all.
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "android")))]
     fn note_hangup(&self) -> bool {
         if self.hung_up.get() {
             return true;
@@ -2243,11 +2293,15 @@ impl TerminalSession {
     /// itself. On Unix it asks crossterm only with a zero timeout, after
     /// the hangup check.
     pub fn poll_event(&self, wait: std::time::Duration) -> io::Result<bool> {
+        #[cfg(target_os = "android")]
+        {
+            crate::android_terminal::poll(wait)
+        }
         #[cfg(windows)]
         if let Some(input) = self.windows_input.borrow_mut().as_mut() {
             return input.poll(wait);
         }
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "android")))]
         {
             if HELD_KEYS.with(|held| !held.borrow().is_empty()) {
                 return Ok(true);
@@ -2290,7 +2344,11 @@ impl TerminalSession {
     }
 
     pub fn read_event(&self) -> io::Result<crossterm::event::Event> {
-        #[cfg(unix)]
+        #[cfg(target_os = "android")]
+        {
+            crate::android_terminal::read()
+        }
+        #[cfg(all(unix, not(target_os = "android")))]
         if let Some(event) = HELD_KEYS.with(|held| held.borrow_mut().pop_front()) {
             return Ok(event);
         }
@@ -2306,6 +2364,7 @@ impl TerminalSession {
             }
             return Ok(event);
         }
+        #[cfg(not(target_os = "android"))]
         crossterm::event::read()
     }
 
@@ -2318,7 +2377,7 @@ impl TerminalSession {
     /// `ESC _ … ESC \` frame and splits it into an Alt+`_`, the reply's
     /// characters and an Alt+`\`, which would type `_Gi=0;OK\` into the
     /// score.
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "android")))]
     fn hold_next_event(&self) -> io::Result<bool> {
         while crossterm::event::poll(std::time::Duration::ZERO)? {
             let event = crossterm::event::read()?;
@@ -2379,18 +2438,25 @@ impl TerminalSession {
     /// input preserves these modifiers natively; Unix terminals need the
     /// negotiated progressive keyboard protocol.
     pub fn precise_modified_keys(&self) -> bool {
-        cfg!(windows) || self.enhanced_keyboard
+        cfg!(any(windows, target_os = "android")) || self.enhanced_keyboard
     }
 
     /// Held computer-piano keys require real releases, not a terminal-name
     /// guess or a user-selected shortcut profile. Native console records
     /// report them even in Conhost; other readers need the negotiated protocol.
     pub fn reports_key_releases(&self) -> bool {
-        #[cfg(windows)]
-        if self.windows_input.borrow().is_some() {
-            return true;
+        #[cfg(target_os = "android")]
+        {
+            true
         }
-        self.enhanced_keyboard
+        #[cfg(not(target_os = "android"))]
+        {
+            #[cfg(windows)]
+            if self.windows_input.borrow().is_some() {
+                return true;
+            }
+            self.enhanced_keyboard
+        }
     }
 
     pub fn features(&self) -> &TerminalFeatures {
@@ -2467,6 +2533,7 @@ impl Drop for TerminalSession {
             // back the reader's earlier mode before leaving raw input.
             let _ = input.restore_input_mode();
         }
+        #[cfg(not(target_os = "android"))]
         let _ = disable_raw_mode();
         #[cfg(windows)]
         if let Some(input) = windows_input.as_mut() {

@@ -391,6 +391,7 @@ impl PreparedLiveOutput {
             &opened.device,
             &opened.config,
             requested,
+            options.buffer_preference(),
             Arc::clone(&backend),
             shared,
             Arc::clone(&gate),
@@ -662,7 +663,8 @@ fn spawn_silent_output(
 }
 
 impl LiveScalarDevice {
-    /// Whether the output stream itself has reported an error: the device
+    /// Whether the output stream reported an error or its Android default
+    /// wireless queue needs a bounded recovery attempt: the device
     /// went away under the music.
     ///
     /// Told apart from the rest of [`Self::check_health`] because it is
@@ -672,6 +674,14 @@ impl LiveScalarDevice {
     /// buffering says the machine cannot keep up and reopening would only
     /// do it again.
     pub fn output_failed(&self) -> bool {
+        #[cfg(target_os = "android")]
+        if super::android::latency_recoverable(
+            &self.name,
+            self.shared.playback_latency_nanos.load(Ordering::Acquire),
+            live_latency_limit_nanos(&self.name),
+        ) {
+            return true;
+        }
         self.shared.failed.load(Ordering::Acquire)
     }
 
@@ -696,7 +706,7 @@ impl LiveScalarDevice {
         // default ceiling is higher. RUSTEL_MAX_LIVE_LATENCY_MS overrides the
         // ceiling on every platform.
         let latency = self.shared.playback_latency_nanos.load(Ordering::Acquire);
-        let limit = live_latency_limit_nanos();
+        let limit = live_latency_limit_nanos(&self.name);
         if latency > limit {
             return Err(DevicePlaybackError::Unavailable(format!(
                 "live output {} buffered {:.1}ms ahead, above the {:.1}ms safety limit",
@@ -832,12 +842,26 @@ impl LiveScalarDevice {
         if cancelled() {
             return Err(DevicePlaybackError::Cancelled);
         }
+        #[cfg(target_os = "android")]
+        let wireless_transition = super::android::latency_recoverable(
+            &self.name,
+            self.shared.playback_latency_nanos.load(Ordering::Acquire),
+            live_latency_limit_nanos(&self.name),
+        );
         let old_sample_rate = self.sample_rate;
         // Closing the output joins its callback thread, so the consumer
         // role is free from here. Saying so explicitly keeps the ring's
         // single-consumer check able to tell this legitimate handoff from a
         // second consumer running concurrently.
         self.close_output();
+        #[cfg(target_os = "android")]
+        if wireless_transition {
+            super::android::wait_for_route_transition(
+                super::android::default_wireless,
+                &cancelled,
+                Duration::from_secs(2),
+            )?;
+        }
         // A release names a copy of the old backend. It holds no box.
         while self.shared.samples.insert_releases.pop().is_some() {}
         // The plugin workers stay. The next turn ships them to the new
@@ -986,7 +1010,7 @@ fn validate_output_samples(
     Ok(())
 }
 
-fn live_latency_limit_nanos() -> u64 {
+fn live_latency_limit_nanos(_name: &str) -> u64 {
     let default_ms = if std::env::var_os("WSL_DISTRO_NAME").is_some()
         || std::env::var_os("WSL_INTEROP").is_some()
     {
@@ -994,6 +1018,8 @@ fn live_latency_limit_nanos() -> u64 {
     } else {
         MAX_LIVE_PLAYBACK_LATENCY_NANOS / 1_000_000
     };
+    #[cfg(target_os = "android")]
+    let default_ms = super::android::latency_limit_ms(_name, default_ms);
     std::env::var(MAX_LIVE_LATENCY_ENV)
         .ok()
         .and_then(|ms| ms.parse::<u64>().ok())
@@ -1346,6 +1372,17 @@ fn find_output_device(
     host: &cpal::Host,
     wanted: &str,
 ) -> Result<cpal::Device, DevicePlaybackError> {
+    // AAudio's default route has a synthetic ID and is not necessarily in
+    // output_devices(). Recycling its current buffer must still reopen that
+    // exact default route; an unknown explicit device must remain an error.
+    #[cfg(target_os = "android")]
+    if let Some(device) = host.default_output_device()
+        && device
+            .id()
+            .is_ok_and(|id| id.to_string().eq_ignore_ascii_case(wanted))
+    {
+        return Ok(device);
+    }
     let candidates = host
         .output_devices()
         .map_err(|error| DevicePlaybackError::Unavailable(error.to_string()))?
@@ -2109,6 +2146,7 @@ fn build_live_stream(
     device: &cpal::Device,
     config: &cpal::SupportedStreamConfig,
     buffer_frames: u32,
+    buffer_preference: AudioBufferPreference,
     backend: Arc<BackendCell>,
     shared: LiveShared,
     gate: Arc<CallbackGate>,
@@ -2119,6 +2157,7 @@ fn build_live_stream(
                 device,
                 config.clone().into(),
                 buffer_frames,
+                buffer_preference,
                 backend,
                 shared,
                 gate,
@@ -2148,6 +2187,7 @@ fn build_live_typed_stream<T>(
     device: &cpal::Device,
     mut config: cpal::StreamConfig,
     buffer_frames: u32,
+    _buffer_preference: AudioBufferPreference,
     backend: Arc<BackendCell>,
     shared: LiveShared,
     gate: Arc<CallbackGate>,
@@ -2159,7 +2199,21 @@ where
     // wall-clock seconds on WSLg. That made both edits and the scheduler clock
     // race far ahead of what was audible. A fixed period asks CPAL backends for
     // a bounded live buffer (Pulse uses a two-period end-to-end target).
-    config.buffer_size = BufferSize::Fixed(buffer_frames);
+    #[cfg(not(target_os = "android"))]
+    {
+        config.buffer_size = BufferSize::Fixed(buffer_frames);
+    }
+    #[cfg(target_os = "android")]
+    {
+        let env_override = std::env::var(LIVE_BUFFER_FRAMES_ENV)
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok())
+            .is_some_and(|n| {
+                (AudioBufferPreference::MIN_FRAMES..=AudioBufferPreference::MAX_FRAMES).contains(&n)
+            });
+        config.buffer_size =
+            super::android::buffer_size(_buffer_preference, buffer_frames, env_override);
+    }
     let channels = usize::from(config.channels);
     let on_error = live_error_callback(
         Arc::clone(&gate),
@@ -3770,7 +3824,10 @@ mod tests {
             assert!(!shared.gate_is_open());
             // The load meter gives the time of the jobs.
             let load = manual.device().report().realtime_load;
-            assert!(load.worker_busy_nanos > 0 && load.join_wait_nanos > 0);
+            assert!(load.worker_busy_nanos > 0);
+            // Short jobs may finish before join observes them, so a zero
+            // join wait is valid. The stalled-worker test below checks that
+            // an actual wait is measured; activation must not depend on one.
 
             // The average opens the gate past half load, with no buffer past
             // 80%, and closes it below 35%.

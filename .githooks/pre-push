@@ -1,0 +1,14 @@
+#!/bin/sh
+# This checkout publishes development work only to the user's Android branch.
+remote_name=$1
+remote_url=$2
+if [ "$remote_name" != origin ] || [ "$remote_url" != https://github.com/IAmTorq/rustel-android.git ]; then
+    echo 'Push refused: this checkout only publishes to IAmTorq/rustel-android.' >&2
+    exit 1
+fi
+while read -r local_ref local_oid remote_ref remote_oid; do
+    if [ "$remote_ref" != refs/heads/android-port ]; then
+        echo 'Push refused: only android-port may be updated; main and upstream stay unchanged.' >&2
+        exit 1
+    fi
+done

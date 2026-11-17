@@ -1,0 +1,9 @@
+{
+  "name": "rustel-android-wrapper-tests",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Local Android wrapper checks; no release publishing",
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

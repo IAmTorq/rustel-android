@@ -7,6 +7,10 @@
 //! count xruns when the host reports them. On Windows the output counts them
 //! from its playback clock.
 
+#[cfg(any(target_os = "android", test))]
+mod android;
+#[cfg(target_os = "android")]
+pub use android::set_output_routes as set_android_output_routes;
 mod callback;
 mod control;
 mod inserts;
@@ -27,10 +31,11 @@ pub use stream::input_retry_delay;
 pub use stream::prime_playback_host;
 use stream::rebase_frame_rate;
 
+#[cfg(not(target_os = "android"))]
+use cpal::BufferSize;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{
-    BufferSize, FromSample, I24, Sample, SampleFormat, SizedSample, StreamInstant,
-    SupportedBufferSize, U24,
+    FromSample, I24, Sample, SampleFormat, SizedSample, StreamInstant, SupportedBufferSize, U24,
 };
 
 use crate::{

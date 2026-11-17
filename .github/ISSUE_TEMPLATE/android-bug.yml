@@ -1,0 +1,33 @@
+name: Android port bug
+description: Report a reproducible Android host issue in this fork.
+title: "[Android] "
+body:
+  - type: input
+    id: version
+    attributes:
+      label: APK version or commit
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device, Android and WebView versions
+      description: Do not include device serial numbers or account details.
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps and minimal public score
+      description: Include the theme and whether playback/camera was active. Remove personal information.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Safe diagnostic evidence
+      description: Review screenshots/logs for tokens, project names and personal content before attaching.

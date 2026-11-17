@@ -134,6 +134,8 @@ impl App {
     /// inside, so a harness's fast settle sees the same state a paused
     /// musician would.
     pub(super) fn pump_turn(&mut self) -> (bool, Instant) {
+        #[cfg(target_os = "android")]
+        crate::android_controls::set_piano(self.piano.open);
         self.pump_piano(Instant::now());
         // This turn drains the pads below; see `pads_drained_at`.
         self.pads_drained_at = Instant::now();
@@ -485,10 +487,15 @@ impl App {
                 // reading it resets that accumulator.
                 self.observe_master(now);
                 let draw_started = Instant::now();
+                #[cfg(target_os = "android")]
+                let draw_cpu_started = thread_cpu_time();
                 self.draw(terminal)?;
+                let draw_cost = draw_started.elapsed();
+                #[cfg(target_os = "android")]
+                let draw_cost = charged_draw_time(draw_cost, draw_cpu_started, thread_cpu_time());
                 (self.frame_pace, self.frame_overruns, self.frame_cheaps) = paced_after(
                     (self.frame_pace, self.frame_overruns, self.frame_cheaps),
-                    draw_started.elapsed(),
+                    draw_cost,
                     frame_interval,
                 );
                 self.dirty_frame = false;
@@ -677,7 +684,7 @@ impl App {
         }
     }
 
-    pub(super) fn emit_performance_snapshot(&self, publication: Publication) {
+    pub(super) fn emit_performance_snapshot(&mut self, publication: Publication) {
         let Some(snapshot) = self.performance.snapshot(publication) else {
             return;
         };
@@ -686,7 +693,7 @@ impl App {
 
     #[allow(clippy::print_stderr, reason = "performance records are opt-in output")]
     pub(super) fn emit_performance_records(
-        &self,
+        &mut self,
         performance: StudioPerformanceSnapshot,
         process: ProcessStats,
     ) {
@@ -703,11 +710,30 @@ impl App {
                 hydra_frames: self.hydra_frame_count(),
             },
         );
-        eprintln!(
-            "{}",
-            serde_json::json!({ "studio_performance": performance })
-        );
-        eprintln!("{}", serde_json::json!({ "studio_runtime": runtime }));
+        // Android embeds Studio in an application process: stderr is not a
+        // private measurement channel and must not be redirected. Opt-in QA
+        // records use the existing session log, once per publication, away
+        // from the audio callback. Production leaves this protocol disabled.
+        #[cfg(target_os = "android")]
+        {
+            self.log.push(
+                LogLevel::Debug,
+                "performance",
+                serde_json::json!({
+                    "studio_performance": performance,
+                    "studio_runtime": runtime,
+                })
+                .to_string(),
+            );
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            eprintln!(
+                "{}",
+                serde_json::json!({ "studio_performance": performance })
+            );
+            eprintln!("{}", serde_json::json!({ "studio_runtime": runtime }));
+        }
     }
 }
 
@@ -789,6 +815,35 @@ pub(super) const MAX_FRAME_PACE: u8 = 8;
 pub(super) const FRAME_OVERRUN_LIMIT: u8 = 6;
 /// Consecutive cheap draws before the animated cadence steps back faster.
 pub(super) const FRAME_QUICK_LIMIT: u8 = 24;
+
+// Android's bounded output pipe can wait for the WebView's refresh/acknowledgement
+// without consuming a core. Charge this CPU-protection budget for actual work;
+// display backpressure still bounds delivery. Desktop retains wall-clock pacing.
+#[cfg(target_os = "android")]
+fn thread_cpu_time() -> Option<Duration> {
+    let mut time = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: clock_gettime fills the timespec we own. This clock measures only
+    // the calling Studio thread, independently of the audio/device workers.
+    if unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut time) } != 0 {
+        return None;
+    }
+    let seconds = u64::try_from(time.tv_sec).ok()?;
+    let nanos = u32::try_from(time.tv_nsec)
+        .ok()
+        .filter(|n| *n < 1_000_000_000)?;
+    Some(Duration::new(seconds, nanos))
+}
+
+#[cfg(any(target_os = "android", test))]
+fn charged_draw_time(wall: Duration, start: Option<Duration>, end: Option<Duration>) -> Duration {
+    start
+        .zip(end)
+        .and_then(|(start, end)| end.checked_sub(start))
+        .map_or(wall, |work| work.min(wall))
+}
 
 /// The animated pace after one draw, from `(pace, overruns, cheap draws)` and
 /// how long the draw took against the configured `interval`.
@@ -1301,6 +1356,44 @@ mod tests {
             state = (8, 0, 0);
             state = paced_after(state, SIXTY * 2, SIXTY);
             assert_eq!(state.0, 8, "the pace is already at its floor");
+        }
+
+        #[test]
+        fn display_wait_is_not_charged_as_rendering_cpu_work() {
+            let start = Duration::from_secs(3);
+            let work = Duration::from_millis(9);
+            let charged = charged_draw_time(SIXTY * 2, Some(start), Some(start + work));
+            assert_eq!(charged, work);
+            let mut state = (1, 0, 0);
+            for _ in 0..FRAME_OVERRUN_LIMIT {
+                state = paced_after(state, charged, SIXTY);
+            }
+            assert_eq!(state.0, 1, "waiting for the display does not spend a core");
+            for _ in 0..FRAME_OVERRUN_LIMIT {
+                let charged = charged_draw_time(SIXTY * 3, Some(start), Some(start + SIXTY * 2));
+                state = paced_after(state, charged, SIXTY);
+            }
+            assert_eq!(
+                state.0, 2,
+                "expensive rendering still slows the animated cadence"
+            );
+        }
+
+        #[test]
+        fn missing_or_invalid_cpu_time_retains_wall_clock_protection() {
+            let wall = Duration::from_millis(20);
+            let start = Duration::from_secs(3);
+            for (a, b) in [
+                (None, Some(start)),
+                (Some(start), None),
+                (Some(start), Some(start - wall)),
+            ] {
+                assert_eq!(charged_draw_time(wall, a, b), wall);
+            }
+            assert_eq!(
+                charged_draw_time(wall, Some(start), Some(start + wall * 2)),
+                wall
+            );
         }
 
         /// Cheap draws hold for a while and then win a faster rung back, so
