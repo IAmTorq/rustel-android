@@ -76,3 +76,21 @@ duration, expected behavior, observed behavior and unresolved failures. Include
 only the summary needed to assess a change in its PR. Keep generated reports,
 recordings and full run logs in local results or CI artifacts, not the source
 tree. Use reproducible fixtures and retain failures for diagnosis.
+
+## Cold-start audio regression
+
+Run `python android/qa/test-aaudio-policy.py` with the pinned Rust compiler on
+PATH, or set RUSTC. This checks the buffered-output policy boundaries without a
+device. It does not prove playback behavior.
+
+With the existing device-run environment pointing to a disposable QA set, run
+`node android/qa/startup-audio.cjs`. The runner cold-launches the QA app, evaluates
+the saved score, and requires zero total xruns, callback errors, late events and
+callback allocations for each launch. `RUSTEL_QA_STARTUP_RUNS` selects 1 to 10
+launches (default 3). Results include the APK digest and output facts. The runner
+does not edit the score and stops playback after each check.
+
+Qualify the actual buffer preference and route. Auto/small callbacks retain the
+upstream low-latency mode and need separate coverage; a buffered-output pass does
+not establish that path. Repeat representative source load, live edits, screen
+lifecycle and Bluetooth handoffs before declaring a release qualified.

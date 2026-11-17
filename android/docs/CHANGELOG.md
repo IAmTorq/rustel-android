@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Use bounded normal-mode AAudio output for large explicit callbacks to avoid
+  fast-output startup underruns. Preserve low-latency mode for Auto and small
+  callbacks, and retain existing latency and callback safety checks.
+
 - Add an ARM64 Android host for the native engine and Studio, with AAudio output,
   foreground playback, touch controls and physical keyboard input.
 - Add numeric text size, a remembered software-keyboard setting, gesture

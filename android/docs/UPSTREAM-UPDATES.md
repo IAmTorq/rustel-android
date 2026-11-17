@@ -86,3 +86,9 @@ with dump-reference-inventory.py and map-function-inventory.py. Diff names,
 synonyms, parameter lists and Android action keys. Textual test/corpus matches
 are leads only; keep new valid/invalid/boundary/combination/device cases
 UNASSESSED until their behavior is actually qualified.
+
+The CPAL AAudio patch and policy/cold-start regressions are documented in
+[the buffered-output note](../../android-native/vendor-fixes/cpal-aaudio-buffered-output.md).
+Review output performance mode, effective queue sizing and ndk frame-count result
+handling together when updating those dependencies. Preserve desktop/capture
+behavior and requalify both speaker and wireless routes.

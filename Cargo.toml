@@ -120,6 +120,8 @@ codegen-units = 16
 incremental = true
 
 [patch.crates-io]
+# Android AAudio startup queue reserve; other backends retain upstream behavior.
+cpal = { path = "android-native/vendor/cpal" }
 # iTerm2 alternate codes, Unix F15-F20 offsets, the key that stays unread
 # after a resize and kitty associated text; return to crates.io after a
 # release includes crossterm-rs/crossterm PRs #1125, #1127 and #1128.

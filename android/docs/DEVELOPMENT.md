@@ -46,6 +46,14 @@ the 250-ms buffering ceiling; identified wireless output has a bounded 500-ms
 allowance. Unknown routes retain the local policy. Stream recovery closes the
 old callback before a bounded route-settling wait and reopen.
 
+Explicit callbacks of at least 1024 frames use normal AAudio output with an
+effective two-period queue configured before start. Auto and smaller callbacks
+keep the low-latency path. Capacity alone does not bound the effective queue;
+normal output can otherwise choose excessive buffering. See the documented
+[CPAL patch](../../android-native/vendor-fixes/cpal-aaudio-buffered-output.md)
+for the implementation, dependency provenance and positive frame-count handling.
+The existing local and wireless latency limits still apply.
+
 Camera conversion retains the newest frame rather than queueing stale frames.
 Preserve orientation, aspect ratio and cover crop; do not fill uncovered strips
 by repeating edge pixels. Review the documented dependency patches under
@@ -111,6 +119,7 @@ Paths below are relative to the repository root; Rust test names can be used as
 | --- | --- | --- |
 | Android needs native output while retaining callback allocation detection. | `android-native/src/allocator.rs` and `crates/audio/src/device/android.rs` connect the native host to AAudio and the shared realtime tripwire. | Allocator positive-control and callback checks; native/device playback tests. |
 | Wireless buffering and disconnects have different timing from local speakers. | `AudioRouteMonitor.java`, `crates/audio/src/device/android.rs` and `device/stream.rs` report routes outside the callback, distinguish bounded wireless buffering, close the previous callback before recovery and bound the route-settling wait. | Route-policy unit tests include `wireless_allowance_follows_the_selected_route_not_just_a_connected_headset` and `missing_route_notification_has_a_bounded_wait`; device speaker/Bluetooth handoffs remain part of release qualification. |
+| Fast-output startup can underrun before any musical events are accepted. | The documented CPAL AAudio output patch selects normal mode for large explicit callbacks and sets the effective queue before start. Auto, small buffers, input and desktop retain upstream behavior; xrun counters are unchanged. | `test-aaudio-policy.py`, `startup-audio.cjs`, then device load and route qualification. |
 | Long runs of comments can repeatedly scan the same source during live evaluation. | `crates/runtime/src/lint.rs` and `crates/transpiler/src/lib.rs` skip already-scanned trivia while preserving diagnostic offsets and expression continuation. These shared fixes also apply to desktop. | `a_long_run_of_blank_and_comment_lines_keeps_the_chain_and_stays_linear`, `check-long-arrangements.py` and live comment/uncomment load tests. |
 | Sample-map names and paths can be mistaken for musical mini-notation. | The shared transpiler and lint walker preserve map data inside `samples({...})` while continuing to compile surrounding patterns. | `sample_map_names_and_paths_are_data_but_other_patterns_still_compile` and `sample_map_urls_are_not_linted_as_mini_notation`. |
 | Large arrangements need parity beyond a simple demonstration score. | `android/qa/` contains corpus preparation/comparison, long-arrangement generation, recording/export and load runners. The shared language and DSP remain authoritative. | Use the corpus and load procedures in TESTING.md and LOAD-TESTING.md; these tools do not establish exhaustive function-pair or sustained-load coverage. |
