@@ -358,6 +358,8 @@ pub(super) fn sample_access(
     // A clone shares the policy's record of refused sources, which the
     // page reads.
     let mut access = session.score_sample_access.clone();
+    #[cfg(target_os = "android")]
+    access.permit_android_sample_folders();
     for source in &grants.sources {
         // The page keeps only sources that the runtime read.
         let _ = access.permit_source(source);

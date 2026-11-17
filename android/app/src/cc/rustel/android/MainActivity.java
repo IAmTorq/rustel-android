@@ -57,6 +57,8 @@ public final class MainActivity extends Activity {
     private volatile String lastUiTheme="";
     private int uiBackground=Color.rgb(15,15,28),uiSurface=Color.rgb(25,25,40),uiForeground=Color.WHITE,uiAccent=Color.CYAN,uiRule=Color.GRAY,uiMuted=Color.LTGRAY;
     private AlertDialog phoneSettings;
+    private native boolean nativeSampleFolder(String name, String base);
+    private static final int SAMPLE_FOLDER = 18;
     private static final int EXPORT = 12, IMPORT = 13, EXPORT_SOURCE = 14, EXPORT_LOG = 15, IMPORT_PATTERNS = 16, OPEN_DOCUMENT = 17;
     private final java.util.concurrent.atomic.AtomicBoolean patternPickerOpen = new java.util.concurrent.atomic.AtomicBoolean();
 
@@ -71,6 +73,7 @@ public final class MainActivity extends Activity {
         setVolumeControlStream(android.media.AudioManager.STREAM_MUSIC);
         camera = new CameraFeed(this);
         audioRoutes = new AudioRouteMonitor(this, this::nativeAudioRoutes);
+        inputs.execute(()->{try { SampleFolders.get(this).publish(this::nativeSampleFolder); } catch(Exception error) { android.util.Log.w("Rustel","Sample folders unavailable",error); }});
         try { seedFiles(); } catch (IOException error) { fail("Could not prepare Rustel", error.toString()); return; }
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -290,6 +293,35 @@ public final class MainActivity extends Activity {
                 .showSoftInput(web, InputMethodManager.SHOW_IMPLICIT);
         });
     }
+    private void sampleFolderError(String title, Exception error) {
+        new AlertDialog.Builder(this).setTitle(title).setMessage(error.getMessage()).setPositiveButton("OK",null).show();
+    }
+    private void chooseSampleFolder() {
+        Intent picker=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+        try { startActivityForResult(picker,SAMPLE_FOLDER); }
+        catch(RuntimeException error) { sampleFolderError("Cannot open sample folder",error); }
+    }
+    private void sampleFolderSelected(Uri uri,int flags) {
+        EditText alias=new EditText(this);alias.setSingleLine(true);
+        try { String id=DocumentsContract.getTreeDocumentId(uri);String name=id.substring(id.lastIndexOf('/')+1);if(name.contains(":"))name=name.substring(name.lastIndexOf(':')+1);alias.setText(name.isEmpty()?"Samples":name); } catch(RuntimeException ignored) { alias.setText("Samples"); }
+        new AlertDialog.Builder(this).setTitle("Sample folder alias").setMessage("Use this name in samples({...}, 'local:NAME/'). Files stay in the selected folder.").setView(alias)
+            .setPositiveButton("Allow",(dialog,which)->{try {
+                SampleFolders.get(this).grant(alias.getText().toString().trim(),uri,flags,this::nativeSampleFolder);
+                Toast.makeText(this,"Sample folder ready: local:"+alias.getText().toString().trim()+"/",Toast.LENGTH_LONG).show();
+            }catch(Exception error){sampleFolderError("Cannot use sample folder",error);}}).setNegativeButton("Cancel",null).show();
+    }
+    private void manageSampleFolders() {
+        try { SampleFolders folders=SampleFolders.get(this);String[] names=folders.names();
+            if(names.length==0){chooseSampleFolder();return;}
+            new AlertDialog.Builder(this).setTitle("Sample folders").setItems(names,(dialog,index)->
+                new AlertDialog.Builder(this).setTitle(names[index]).setMessage("Referenced as local:"+names[index]+"/. Removing access keeps the original files.")
+                    .setNeutralButton("Refresh",(d,w)->{try{folders.refresh(names[index],this::nativeSampleFolder);Toast.makeText(this,"Folder refreshed. Save and play to reload the sample definitions.",Toast.LENGTH_LONG).show();}catch(Exception error){sampleFolderError("Cannot refresh folder",error);}})
+                    .setPositiveButton("Remove access",(d,w)->{try{folders.remove(names[index],this::nativeSampleFolder);}catch(Exception error){sampleFolderError("Cannot remove folder",error);}})
+                    .setNegativeButton("Cancel",null).show())
+                .setPositiveButton("Add folder",(d,w)->chooseSampleFolder()).setNegativeButton("Done",null).show();
+        }catch(Exception error){sampleFolderError("Sample folders unavailable",error);}
+    }
     private void showSettings() {
         LinearLayout body = new LinearLayout(this); body.setPadding(32,16,32,16); body.setOrientation(LinearLayout.VERTICAL);
         TextView label = new TextView(this); label.setTextColor(Color.WHITE); body.addView(label);
@@ -317,6 +349,7 @@ public final class MainActivity extends Activity {
         addButton(body,"Allow camera themes",()->requestPermissions(new String[]{Manifest.permission.CAMERA},23));
         addButton(body,"Import a score",()->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE),IMPORT));
         addButton(body,"Export projects and settings",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").putExtra(Intent.EXTRA_TITLE,"Rustel-phone-backup.zip").addCategory(Intent.CATEGORY_OPENABLE),EXPORT));
+        addButton(body,"Sample folders",this::manageSampleFolders);
         addButton(body,"Export app source code",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/gzip").putExtra(Intent.EXTRA_TITLE,"rustel-android-source.tar.gz").addCategory(Intent.CATEGORY_OPENABLE),EXPORT_SOURCE));
         addButton(body,"Test phone keyboard",()->keyboardTest());
         addButton(body,"Export startup diagnostics",()->exportDiagnostics());
@@ -414,6 +447,10 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy() { disposed=true;nativeStop();if(audioRoutes!=null)audioRoutes.close();if(current==this)current=null;painted.release();closeOutputChannel();outputAcknowledgements.quitSafely();if(camera!=null)camera.dispose();if(web!=null)web.destroy();inputs.shutdownNow();super.onDestroy(); }
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);
+        if(request==SAMPLE_FOLDER) {
+            if(result==RESULT_OK && data!=null && data.getData()!=null)sampleFolderSelected(data.getData(),data.getFlags());
+            return;
+        }
         final boolean patternRequest=request==IMPORT_PATTERNS || request==OPEN_DOCUMENT;
         if(result!=RESULT_OK || data==null || data.getData()==null) {
             if(patternRequest) patternPickerOpen.set(false);

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add persisted sample-folder access through Android's directory picker, including
+  subfolders, reusable sample-map aliases, indexed arrays and note-mapped banks.
+  Read files on demand and support refresh and access removal.
+
 - Use bounded normal-mode AAudio output for large explicit callbacks to avoid
   fast-output startup underruns. Preserve low-latency mode for Auto and small
   callbacks, and retain existing latency and callback safety checks.

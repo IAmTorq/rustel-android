@@ -111,6 +111,28 @@ pub extern "system" fn Java_cc_rustel_android_MainActivity_nativeUiTheme(
         .unwrap_or(std::ptr::null_mut())
 }
 #[unsafe(no_mangle)]
+pub extern "system" fn Java_cc_rustel_android_MainActivity_nativeSampleFolder(
+    mut env: JNIEnv,
+    _this: JObject,
+    name: JString,
+    base: JString,
+) -> jni::sys::jboolean {
+    let Ok(name) = env.get_string(&name) else {
+        return 0;
+    };
+    let name: String = name.into();
+    let base = if base.is_null() {
+        None
+    } else {
+        let Ok(value) = env.get_string(&base) else {
+            return 0;
+        };
+        Some(String::from(value))
+    };
+    rustel_runtime::samples::set_android_sample_folder(&name, base.as_deref()).is_ok()
+        as jni::sys::jboolean
+}
+#[unsafe(no_mangle)]
 pub extern "system" fn Java_cc_rustel_android_MainActivity_nativeActions(
     env: JNIEnv,
     _this: JObject,

@@ -69,7 +69,18 @@ impl ScoreSampleAccess {
     }
 
     pub fn is_denied(&self) -> bool {
+        #[cfg(any(target_os = "android", test))]
+        if self.android_folder_revision.is_some() && super::android_folders::has_grants() {
+            return false;
+        }
         self.local_root.is_none() && self.sources.is_empty()
+    }
+
+    /// Enable host-selected Android document folders for this Studio policy.
+    /// A denied policy stays denied until the host explicitly enables this adapter.
+    #[cfg(any(target_os = "android", test))]
+    pub fn permit_android_sample_folders(&mut self) {
+        self.android_folder_revision = Some(super::android_folders::generation());
     }
 
     pub(super) fn approve_remote(&self, raw: &str) -> Result<(Arc<str>, ScoreFetchAccess), String> {
@@ -77,6 +88,15 @@ impl ScoreSampleAccess {
             .map_err(|error| format!("samples() URL is invalid: {error}"))?;
         if !parsed.username().is_empty() || parsed.password().is_some() {
             return Err("samples() URL contains credentials".to_owned());
+        }
+        #[cfg(any(target_os = "android", test))]
+        if self.android_folder_revision.is_some()
+            && let Some(base) = super::android_folders::active_base(&parsed)
+        {
+            return Ok((
+                Arc::from(parsed.as_str()),
+                ScoreFetchAccess::AndroidFolder { base: base.into() },
+            ));
         }
         if !self.sources.iter().any(|rule| rule.allows(&parsed)) {
             self.note_refused(&parsed);
@@ -98,6 +118,17 @@ impl ScoreSampleAccess {
     /// A remote grant takes this policy's sources, which judge its redirects.
     pub(super) fn regrant(&self, url: &str, grant: &ScoreFetchAccess) -> ScoreFetchAccess {
         match grant {
+            #[cfg(any(target_os = "android", test))]
+            ScoreFetchAccess::AndroidFolder { base }
+                if self.android_folder_revision.is_some()
+                    && Url::parse(url)
+                        .ok()
+                        .and_then(|url| super::android_folders::active_base(&url))
+                        .as_deref()
+                        == Some(base.as_ref()) =>
+            {
+                grant.clone()
+            }
             ScoreFetchAccess::Remote { .. } if matches!(self.source_for(url), Ok(Some(_))) => {
                 ScoreFetchAccess::Remote {
                     sources: Arc::clone(&self.sources),
@@ -159,7 +190,15 @@ impl ScoreSampleAccess {
             return Ok(());
         };
         match read_source(&source, GITHUB_SAMPLE_MANIFEST) {
-            SampleSource::LocalFolder(_) => {
+            SampleSource::LocalFolder(folder) => {
+                #[cfg(any(target_os = "android", test))]
+                if self.android_folder_revision.is_some()
+                    && super::android_folders::resolve(folder.trim(), "")?.is_some()
+                {
+                    return Ok(());
+                }
+                #[cfg(not(target_os = "android"))]
+                let _ = folder;
                 if self.local_root.is_none() {
                     self.note_local_refused();
                     return Err(
@@ -410,6 +449,17 @@ pub(super) fn fetch_score_source_with_budget(
             }
             budget.check()?;
             Ok(bytes)
+        }
+        #[cfg(any(target_os = "android", test))]
+        ScoreFetchAccess::AndroidFolder { base } => {
+            let parsed = sample_fetch::wire_url(url)?;
+            if super::android_folders::active_base(&parsed).as_deref() != Some(base.as_ref()) {
+                return Err("Sample folder access was removed".to_owned());
+            }
+            let remote = ScoreFetchAccess::Remote {
+                sources: vec![SourceRule::parse(base)?].into(),
+            };
+            fetch_score_source_with_budget(url, &remote, limit, budget, before_local_open)
         }
         ScoreFetchAccess::Withdrawn => Err(format!("{url}: its source was turned off")),
         ScoreFetchAccess::Remote { .. } => {
@@ -676,7 +726,34 @@ fn approve_score_url(
     sources
         .try_reserve(1)
         .map_err(|_| "not enough host memory for sample sources".to_owned())?;
-    let (url, source_access) = access.approve_remote(&join_url(base, file))?;
+    let (url, source_access) = if let Some(folder) = base.strip_prefix("local:") {
+        #[cfg(any(target_os = "android", test))]
+        if access.android_folder_revision.is_some()
+            && let Some((url, _)) = super::android_folders::resolve(folder, file)?
+        {
+            let (url, source_access) = access.approve_remote(&url)?;
+            sources.push((url.clone(), source_access));
+            return Ok(url);
+        }
+        let root = access.local_root.as_ref().ok_or_else(|| {
+            access.note_local_refused();
+            "samples() local map requires a host-selected sample folder".to_owned()
+        })?;
+        let relative = Path::new(folder).join(file);
+        if !crate::sample_server::relative_sample_path_allowed(&relative) {
+            return Err("samples() filename must stay inside the permitted folder".to_owned());
+        }
+        let url = Url::from_file_path(root.path().join(relative))
+            .map_err(|_| "samples() filename is not a valid local path".to_owned())?;
+        (
+            Arc::<str>::from(url.as_str()),
+            ScoreFetchAccess::Local {
+                root: Arc::clone(root),
+            },
+        )
+    } else {
+        access.approve_remote(&join_url(base, file))?
+    };
     sources.push((url.clone(), source_access));
     Ok(url)
 }
@@ -796,6 +873,46 @@ pub(super) fn expand_case_insensitive(banks: &mut HashMap<String, Bank>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_sample_maps_share_the_granted_root_and_reject_escapes() {
+        let folder = std::env::temp_dir().join(format!("rustel-local-map-{}", std::process::id()));
+        std::fs::create_dir_all(folder.join("kit")).unwrap();
+        std::fs::write(folder.join("kit/zero.wav"), b"sample bytes").unwrap();
+        let mut access = ScoreSampleAccess::denied();
+        let mut sources = Vec::new();
+        let value = serde_json::json!({"c3":"zero.wav", "g3":["zero.wav"]});
+        assert!(parse_score_bank(&value, "local:kit/", &access, &mut sources).is_err());
+        access.permit_local_root(&folder).unwrap();
+        assert!(
+            parse_score_bank(&value, "local:kit/", &access, &mut sources)
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(sources.len(), 2);
+        for (url, grant) in &sources {
+            let bytes = fetch_score_source_with_budget(
+                url,
+                grant,
+                1024,
+                &sample_fetch::FetchBudget::for_one_fetch(),
+                || {},
+            )
+            .unwrap();
+            assert_eq!(bytes, b"sample bytes");
+        }
+        for file in ["../outside.wav", "/outside.wav", ".private.wav"] {
+            assert!(
+                parse_score_bank(&serde_json::json!(file), "local:", &access, &mut Vec::new())
+                    .is_err()
+            );
+        }
+        drop(sources);
+        drop(access);
+        std::fs::remove_file(folder.join("kit/zero.wav")).unwrap();
+        std::fs::remove_dir(folder.join("kit")).unwrap();
+        std::fs::remove_dir(folder).unwrap();
+    }
 
     /// A tried address says what it loaded in words a player reads.
     /// A refusal names the folder of the refused file once, for every clone

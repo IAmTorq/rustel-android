@@ -474,7 +474,7 @@ impl App {
     /// A permission was given: the refusal on the footer that `names` it
     /// is gone, and the update it refused runs again by itself once the
     /// engine holds the permission. The answer says whether one was owed.
-    fn rerun_refused(&mut self, names: impl Fn(&str) -> bool) -> bool {
+    pub(super) fn rerun_refused(&mut self, names: impl Fn(&str) -> bool) -> bool {
         let mut unblocked = false;
         for owner in [ErrorOwner::Evaluation, ErrorOwner::Setup] {
             if self.errors.get(owner).is_some_and(&names) {

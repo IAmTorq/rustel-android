@@ -92,3 +92,8 @@ The CPAL AAudio patch and policy/cold-start regressions are documented in
 Review output performance mode, effective queue sizing and ndk frame-count result
 handling together when updating those dependencies. Preserve desktop/capture
 behavior and requalify both speaker and wireless routes.
+
+The document-folder adapter uses the shared sample-map and fetch-access paths.
+When updating the sample loader, preserve explicit host-policy opt-in, permission
+withdrawal, local read freshness, filename encoding and indexed-bank ordering.
+Run the Android folder contracts and the normal local/remote sample tests.

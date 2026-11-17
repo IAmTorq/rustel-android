@@ -30,6 +30,10 @@ use url::Url;
 use crate::product;
 
 mod access;
+#[cfg(any(target_os = "android", test))]
+mod android_folders;
+#[cfg(target_os = "android")]
+pub use android_folders::{set_android_sample_folder, take_android_sample_folder_change};
 mod rules;
 #[cfg(feature = "hydra")]
 pub(crate) use access::read_local_media;
@@ -138,6 +142,8 @@ const SCORE_CACHE_KEY_DOMAIN_V1: &[u8] = b"strudel-score-cache-v1\0";
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ScoreSampleAccess {
     local_root: Option<Arc<crate::sample_server::ServedRoot>>,
+    #[cfg(any(target_os = "android", test))]
+    android_folder_revision: Option<u64>,
     /// Shared by each address it allows, which judges its redirects by it.
     sources: Arc<[SourceRule]>,
     refused: RefusedSources,
@@ -195,6 +201,10 @@ enum ScoreFetchAccess {
     Local {
         root: Arc<crate::sample_server::ServedRoot>,
     },
+    /// Android's host-selected document tree, transported through its private
+    /// loopback endpoint. Like a filesystem grant, reads bypass remote caches.
+    #[cfg(any(target_os = "android", test))]
+    AndroidFolder { base: Arc<str> },
     /// An address whose source the host took back. It is not read again.
     Withdrawn,
 }

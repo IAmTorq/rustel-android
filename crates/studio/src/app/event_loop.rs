@@ -249,6 +249,11 @@ impl App {
         self.settle_readiness(now);
         self.sync_live_material(now);
         self.send_sample_memory();
+        #[cfg(target_os = "android")]
+        if rustel_runtime::samples::take_android_sample_folder_change() {
+            self.sample_grants_owed = true;
+            self.rerun_refused(|message| message.contains("sample"));
+        }
         self.send_import_origins();
         self.send_sample_grants();
         self.send_csound();

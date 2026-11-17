@@ -71,6 +71,22 @@ impl ManifestContext {
                 let written = source.as_str();
                 let url = match read_source(source, GITHUB_SAMPLE_MANIFEST) {
                     SampleSource::LocalFolder(rest) => {
+                        #[cfg(any(target_os = "android", test))]
+                        if access.android_folder_revision.is_some()
+                            && let Some((url, _)) =
+                                super::android_folders::resolve(rest.trim(), "")?
+                        {
+                            return self.register_score_custom_value(
+                                &serde_json::Value::String(url),
+                                None,
+                                None,
+                                access,
+                                depth + 1,
+                                budget,
+                                Some(written),
+                                layer,
+                            );
+                        }
                         return self.register_score_local_folder(
                             rest.trim(),
                             access,

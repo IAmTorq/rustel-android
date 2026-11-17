@@ -84,8 +84,12 @@ request ownership and cleanup apply to cancellation and failure as well as succe
 Open creates a durable set; Import uses Studio's existing conflict rules.
 
 Audio placed in a set directory is discovered by the shared sample library.
-Arbitrary shared-storage folders still require an Android directory-access
-adapter. Keep normal on-demand downloads and cache reuse.
+Shared-storage sample folders use persisted Android document-tree grants; see
+[SAMPLES.md](SAMPLES.md). The adapter resolves named local bases and reads requested
+files through a private loopback endpoint. The shared loader grants those endpoints
+only in an explicitly enabled Studio policy and bypasses remote byte caches for
+these local reads. Grant changes follow the existing Studio permission-update
+path. Keep normal remote-pack downloads and cache reuse.
 
 QA and production use different package identities. Production must omit QA
 native entry points and WebView debugging. Preserve package and signing identity

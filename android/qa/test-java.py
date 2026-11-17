@@ -19,7 +19,7 @@ def executable(name):
     return found
 
 
-classes = ['CameraFrames', 'TerminalFrameBatcher', 'PatternImport']
+classes = ['CameraFrames', 'TerminalFrameBatcher', 'PatternImport', 'SampleFolderPaths']
 sources = []
 for name in classes:
     sources.extend([
