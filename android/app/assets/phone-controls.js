@@ -28,7 +28,19 @@ try{
  document.documentElement.dataset.renderer='webgl';
 }catch(unsupported){domRenderer();}
 let ready=false;
+let ctrlMComments=!!bridge?.ctrlMCommentsEnabled?.();
+window.setCtrlMComments=enabled=>{ctrlMComments=enabled;};
 const modifiers=new Map([[1,0],[2,0],[4,0]]);
+let selectingText=false;
+const selectionButton=document.getElementById('select-text');
+function setSelectingText(active){
+ selectingText=active;
+ selectionButton.textContent=active?'End selection':'Start selection';
+ selectionButton.classList.toggle('on',active);
+ selectionButton.setAttribute('aria-pressed',String(active));
+}
+selectionButton.addEventListener('pointerdown',keepEditorFocus);
+selectionButton.addEventListener('click',()=>{setSelectingText(!selectingText);term.focus();});
 const named={Escape:27,Enter:13,Tab:9,Backspace:127,Insert:57348,Delete:57349,ArrowLeft:57350,ArrowRight:57351,ArrowUp:57352,ArrowDown:57353,PageUp:57354,PageDown:57355,Home:57356,End:57357};
 for(let i=1;i<=12;i++)named['F'+i]=57363+i;
 function raw(text){if(bridge)bridge.input(text);}
@@ -38,8 +50,11 @@ function releaseOneShot(){for(const [bit,state]of modifiers)if(state===1)modifie
 function clearModifiers(){for(const bit of modifiers.keys())modifiers.set(bit,0);drawModifiers();}
 function keyCode(name){return named[name]??([...name].length===1?name.codePointAt(0):null);}
 function sendKey(name,physical=0,kind=1,consume=true){
+ if(name==='Escape'&&selectingText&&kind===1)setSelectingText(false);
+ const extend=selectingText&&(name.startsWith('Arrow')||['Home','End','PageUp','PageDown'].includes(name));
+ const mask=physical|modifierMask()|(extend?1:0);
+ if(ctrlMComments&&mask===4&&name==='m')name='/';
  const code=keyCode(name);if(code===null)return false;
- const mask=physical|modifierMask();
  raw('\x1b['+code+';'+(1+mask)+':'+kind+'u');
  if(consume&&kind!==3)releaseOneShot();
  return true;
@@ -52,7 +67,7 @@ function input(data){
  raw(data);
 }
 term.onData(input);
-installTerminalTouch(term,bridge,raw,sendKey);
+installTerminalTouch(term,bridge,raw,sendKey,()=>selectingText);
 term.attachCustomKeyEventHandler(event=>{
  if(event.type!=='keydown')return true;
  const physical=(event.shiftKey?1:0)|(event.altKey?2:0)|(event.ctrlKey?4:0)|(event.metaKey?8:0);
@@ -81,14 +96,55 @@ function fitScreen(){
  // Large chosen text retains horizontal scrolling rather than clipping dialogs.
 }
 
+function keepEditorFocus(event){
+ if(document.activeElement===term.textarea)event.preventDefault();
+}
 document.querySelectorAll('[data-mod]').forEach(button=>{
  let timer=null,held=false;
+ button.addEventListener('pointerdown',keepEditorFocus);
  button.addEventListener('pointerdown',()=>{held=false;timer=setTimeout(()=>{held=true;modifiers.set(+button.dataset.mod,2);drawModifiers();},450);});
  for(const type of ['pointerup','pointercancel','pointerleave'])button.addEventListener(type,()=>clearTimeout(timer));
  button.addEventListener('contextmenu',event=>event.preventDefault());
  button.addEventListener('click',()=>{if(!held){let bit=+button.dataset.mod;modifiers.set(bit,modifiers.get(bit)?0:1);drawModifiers();}term.focus();});
 });
-function wireKey(button){button.addEventListener('click',event=>{const physical=(event.shiftKey?1:0)|(event.altKey?2:0)|(event.ctrlKey?4:0)|(event.metaKey?8:0);if(button.dataset.key==='F2')closeDrawer();sendKey(button.dataset.key,physical);term.focus();});}
+function physicalModifiers(event){
+ return (event.shiftKey?1:0)|(event.altKey?2:0)|(event.ctrlKey?4:0)|(event.metaKey?8:0);
+}
+function wireKey(button){
+ const key=button.dataset.key;
+ let timer=null,pointer=null,repeated=false;
+ if(key.startsWith('Arrow')){
+  const stop=()=>{
+   clearTimeout(timer);timer=null;pointer=null;
+  };
+  button.addEventListener('pointerdown',event=>{
+   if(!event.isPrimary||event.button!==0)return;
+   stop();pointer=event.pointerId;repeated=false;
+   const start=performance.now(),physical=physicalModifiers(event);
+   let mask=physical;
+   const repeat=()=>{
+    if(!repeated)mask|=modifierMask();
+    sendKey(key,mask,repeated?2:1,!repeated);
+    repeated=true;
+    const elapsed=performance.now()-start;
+    timer=setTimeout(repeat,Math.max(42,175-(elapsed-350)*0.075));
+   };
+   timer=setTimeout(repeat,350);
+  });
+  for(const type of ['pointerup','pointercancel','pointerleave','lostpointercapture']){
+   button.addEventListener(type,event=>{if(event.pointerId===pointer)stop();});
+  }
+  window.addEventListener('blur',stop);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
+  button.addEventListener('contextmenu',event=>event.preventDefault());
+ }
+ button.addEventListener('pointerdown',keepEditorFocus);
+ button.addEventListener('click',event=>{
+  if(repeated&&event.detail>0){repeated=false;return;}
+  if(key==='F2')closeDrawer();
+  sendKey(key,physicalModifiers(event));term.focus();
+ });
+}
 document.querySelectorAll('[data-key]').forEach(wireKey);
 const catalog=bridge&&bridge.actions?JSON.parse(bridge.actions()):[];
 function invokeAction(key){const action=catalog.find(a=>a.key===key);if(!action)return;clearModifiers();closeDrawer();raw('\x1b['+action.token+';13u');term.focus();}
@@ -96,6 +152,38 @@ document.querySelectorAll('[data-action]').forEach(button=>button.onclick=()=>in
 const drawer=document.getElementById('drawer');
 function openDrawer(tab){drawer.hidden=false;document.querySelectorAll('#drawer section').forEach(section=>section.hidden=section.id!==tab+'-panel');if(bridge&&bridge.terminalFocus)bridge.terminalFocus(tab!=='actions');if(tab==='actions'){document.getElementById('action-search').value='';filterActions();document.getElementById('action-search').focus();}else term.focus();}
 function closeDrawer(){drawer.hidden=true;if(bridge&&bridge.terminalFocus)bridge.terminalFocus(true);term.focus();}
+const symBar=document.getElementById('sym-bar');
+const symButton=document.createElement('button');
+symButton.textContent='Quick symbols';
+document.getElementById('keys-panel').append(symButton);
+const sliderButton=document.createElement('button');
+sliderButton.textContent='Adjust slider';
+sliderButton.addEventListener('pointerdown',keepEditorFocus);
+sliderButton.onclick=()=>{
+ clearModifiers();closeDrawer();sendKey('Enter',2);
+};
+document.getElementById('keys-panel').append(sliderButton);
+let symBarEnabled=false;
+window.setSymBarEnabled=enabled=>{
+ symBarEnabled=enabled;symButton.hidden=!enabled;
+ if(!enabled)symBar.hidden=true;
+};
+window.toggleSymBar=()=>{
+ if(!symBarEnabled)return;
+ const opening=symBar.hidden;
+ if(opening)closeDrawer();
+ symBar.hidden=!opening;
+};
+symButton.onclick=window.toggleSymBar;
+for(const symbol of ['{','}','[',']',';','$','<','>','=','|','\\','`','%','&','~','^']){
+ const button=document.createElement('button');
+ button.textContent=symbol;
+ button.addEventListener('pointerdown',keepEditorFocus);
+ button.addEventListener('contextmenu',event=>event.preventDefault());
+ button.onclick=()=>{clearModifiers();raw(symbol);term.focus();};
+ symBar.append(button);
+}
+window.setSymBarEnabled(!!bridge?.symBarEnabled?.());
 function cameraButton(){const facing=bridge&&bridge.cameraFacing?bridge.cameraFacing():'front';document.getElementById('flip-camera').textContent='Switch to '+(facing==='front'?'rear':'front')+' camera';}
 cameraButton();
 document.getElementById('flip-camera').onclick=()=>{clearModifiers();if(bridge&&bridge.flipCamera)bridge.flipCamera();cameraButton();closeDrawer();};
@@ -146,6 +234,8 @@ window.receivePending=()=>{
  const data=bridge.readOutput();if(data!==null)window.receive(data);else acknowledgeOutput();
 };
 window.changeFontSize=value=>{term.options.fontSize=Math.max(8,Math.min(22,value));fitScreen();};
+window.changeButtonSize=value=>{document.documentElement.style.setProperty('--phone-button-size',Math.max(8,Math.min(16,value))+'px');};
+window.changeButtonSize(bridge?.buttonSize?.()??12);
 window.pasteText=text=>term.paste(text);
 new ResizeObserver(fitScreen).observe(document.getElementById('term'));window.addEventListener('resize',fitScreen);
 requestAnimationFrame(()=>{fitScreen();ready=true;if(bridge)bridge.ready(term.cols,term.rows);else term.writeln('Android display preview — native engine starts in the APK.');term.focus();});

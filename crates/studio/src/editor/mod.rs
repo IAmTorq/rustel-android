@@ -60,7 +60,7 @@ const COMMENT_PREFIX: &str = "// ";
 /// Edit groups retained for mapping evaluated source ranges forward. Past
 /// this a highlight from a very old revision is simply dropped, which is what
 /// the renderer already does for an unknown generation.
-pub const DEFAULT_WHEEL_ROWS: usize = 3;
+pub const DEFAULT_WHEEL_ROWS: usize = if cfg!(target_os = "android") { 1 } else { 3 };
 const MULTI_CLICK_WINDOW_MS: u64 = 500;
 
 /// Inputs that change the document's row layout, independent of scrolling.

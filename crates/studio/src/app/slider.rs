@@ -505,16 +505,20 @@ impl App {
         if let Some((scene, chip)) = self.slider_at(x, y)
             && let Some((track_x, width)) = self.slider_pill_track(scene, &chip)
         {
-            let track = SliderTrack { x: track_x, width };
-            // Capture before rewriting the literal: the edit
-            // invalidates the map, including during this batch.
-            self.pointer = Some(Pointer::Slider {
-                scene,
-                call_from: chip.call.start,
-                track,
-            });
-            self.drag_slider(scene, chip.call.start, track, x);
-            self.armed_slider = Some((scene, chip.call.start));
+            let target = (scene, chip.call.start);
+            let adjust = !cfg!(target_os = "android") || self.armed_slider == Some(target);
+            if adjust {
+                let track = SliderTrack { x: track_x, width };
+                // Capture before rewriting the literal: the edit
+                // invalidates the map, including during this batch.
+                self.pointer = Some(Pointer::Slider {
+                    scene,
+                    call_from: chip.call.start,
+                    track,
+                });
+                self.drag_slider(scene, chip.call.start, track, x);
+            }
+            self.armed_slider = Some(target);
             // The pill is the score's: a click on it takes the
             // keyboard back from whatever panel had it, or the
             // panel keeps the arrows and the control never steps.

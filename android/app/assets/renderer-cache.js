@@ -4,7 +4,7 @@
 // frames, leaving terminal contents, colors and the GPU renderer intact.
 window.boundRendererCache=(term,addon,clock=()=>performance.now(),schedule=requestAnimationFrame)=>{
  const canvases=new Set();
- const budgetPixels=1024*1024; // 4 MiB of RGBA atlas pages before maintenance.
+ const budgetPixels=2*1024*1024; // 8 MiB of RGBA atlas pages before maintenance.
  let lastClear=-Infinity,pending=false,disposed=false,clears=0,generation=0;
  const change=addon.onChangeTextureAtlas(canvas=>{
   // A font/DPR change replaces the atlas; its disposal does not emit page

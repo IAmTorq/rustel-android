@@ -819,10 +819,14 @@ fn render_text_row(
             // holding, and it has to stay legible while it is held.
             style = style.bg(theme.selection).fg(theme.selection_text);
         }
+        let display = match cell.display.as_str() {
+            "\u{2800}" => " ",
+            display => display,
+        };
         buffer.set_stringn(
             cell.screen_x.start,
             row.screen_y,
-            &cell.display,
+            display,
             usize::from(cell.screen_x.end.saturating_sub(cell.screen_x.start)),
             style,
         );
@@ -1333,6 +1337,41 @@ mod tests {
             .cell((cell.x, cell.y))
             .expect("rendered cell")
             .clone()
+    }
+
+    #[test]
+    fn blank_braille_renders_like_space_without_erasing_visible_unicode() {
+        let theme = theme();
+        let source = "// ⠀⣿ (•‿•)";
+        for (glyph, expected) in [('⠀', " "), ('⣿', "⣿"), ('‿', "‿")] {
+            let cell = styled_cell(
+                &theme,
+                source,
+                Decorations::default(),
+                source.find(glyph).unwrap(),
+            );
+            assert_eq!(cell.symbol(), expected);
+            assert_eq!(cell.bg, Color::Reset);
+        }
+        let blank = source.find('⠀').unwrap();
+        let marks = [SourceMark {
+            from: blank,
+            to: blank + '⠀'.len_utf8(),
+            color: Color::Rgb(255, 202, 40),
+            onset_id: 1,
+            strength: 1.0,
+        }];
+        let marked = styled_cell(
+            &theme,
+            source,
+            Decorations {
+                active: &marks,
+                ..Decorations::default()
+            },
+            blank,
+        );
+        assert_eq!(marked.symbol(), " ");
+        assert_ne!(marked.bg, Color::Reset);
     }
 
     /// A row scrolled past the start of its line is coloured as that line.

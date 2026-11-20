@@ -22,7 +22,7 @@ Local changes:
   upstream colored-glyph path. Color/geometry comparisons cover both paths.
 
 The Android helper schedules public clearTextureAtlas calls between frames at
-most twice per second after the pixel threshold is reached. Its threshold is
+most twice per second after the 8 MiB RGBA threshold is reached. Its threshold is
 a maintenance trigger, not a hard bound on memory allocated within one frame.
 The current 1,200-frame test plateaus at 262,144 atlas pixels for RGB masks and
 4,194,304 for the inverse fallback, with repeated eviction exercised separately.

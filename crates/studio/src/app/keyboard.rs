@@ -957,6 +957,17 @@ impl App {
             self.close_panel(kind);
             return Ok(true);
         }
+        #[cfg(target_os = "android")]
+        if key.code == KeyCode::Esc
+            && key.modifiers.is_empty()
+            && key.kind == KeyEventKind::Press
+            && self.focus == Focus::Editor
+            && self.set_panel.is_some()
+            && !self.regions.sidebar_hidden
+        {
+            self.hide_set_panel();
+            return Ok(true);
+        }
         match super::vim::handle_text_key(self, key) {
             super::vim::VimTextKey::Ignored => {}
             super::vim::VimTextKey::Consumed => return Ok(true),

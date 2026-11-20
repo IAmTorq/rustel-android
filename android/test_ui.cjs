@@ -44,17 +44,51 @@ const fs=require('fs'),path=require('path'),url=require('url'),assert=require('a
   }
   assert(margins.some(m=>m.mode==='fitted')&&margins.some(m=>m.mode==='scrollable'),'Exercise both fitted and minimum-width layouts');
   await page.setViewportSize({width:432,height:432});await page.waitForTimeout(70);
+  await page.evaluate(()=>{changeFontSize(14);changeButtonSize(16);});
+  const buttonMetrics=()=>page.evaluate(()=>({
+   terminal:term.options.fontSize,
+   toolbar:getComputedStyle(document.querySelector('#tools button')).fontSize,
+   arrow:getComputedStyle(document.querySelector('#arrows button')).fontSize
+  }));
+  assert.deepStrictEqual(await buttonMetrics(),{terminal:14,toolbar:'16px',arrow:'16px'});
+  await page.evaluate(()=>changeFontSize(10));
+  assert.deepStrictEqual(await buttonMetrics(),{terminal:10,toolbar:'16px',arrow:'16px'});
+  await page.evaluate(()=>changeButtonSize(12));
 
   assert(await page.locator('[data-key="Enter"]').count()===0);assert(await page.locator('#shift').count()===0);
   const arrows=await page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('#arrows button')].map(b=>{const r=b.getBoundingClientRect();return [b.dataset.key,{x:r.x,y:r.y,w:r.width,h:r.height}]})));
   assert(Math.abs(arrows.ArrowLeft.w-52)<0.1&&Math.abs(arrows.ArrowRight.w-52)<0.1);
   assert(Math.abs(arrows.ArrowLeft.h-arrows.ArrowUp.h-arrows.ArrowDown.h-3)<0.1);
   assert(arrows.ArrowLeft.x<arrows.ArrowUp.x&&arrows.ArrowUp.x<arrows.ArrowRight.x&&arrows.ArrowDown.x===arrows.ArrowUp.x);
-  const input=async()=>page.evaluate(()=>calls.filter(x=>x[0]==='input').map(x=>x[1]));
+  const input=async()=>page.evaluate(()=>calls.filter(x=>x[0]==='input'&&!x[1].startsWith('\x1b[<35;')).map(x=>x[1]));
   const last=async()=>{const data=await input();return data[data.length-1];};
+  const symBar=page.locator('#sym-bar');
+  await page.evaluate(()=>toggleSymBar());
+  assert(await symBar.isHidden(),'Opt-out keeps quick symbols closed');
+  await page.evaluate(()=>{setSymBarEnabled(true);toggleSymBar();});
+  assert(await symBar.isVisible());
+  for(const symbol of ['{','}','[',']',';','$','|','\\','~','^']){
+   await symBar.getByRole('button',{name:symbol,exact:true}).tap();
+   assert.strictEqual(await last(),symbol);
+   assert(await page.evaluate(()=>document.activeElement===term.textarea));
+  }
+  await page.evaluate(()=>toggleSymBar());assert(await symBar.isHidden());
+  await page.locator('#more').tap();
+  await page.getByRole('button',{name:'Quick symbols',exact:true}).tap();
+  assert(await symBar.isVisible());
+  await page.evaluate(()=>setSymBarEnabled(false));assert(await symBar.isHidden());
+  await page.locator('#more').tap();
+  await page.getByRole('button',{name:'Adjust slider',exact:true}).tap();
+  assert.strictEqual(await last(),'\x1b[13;3:1u');
+  assert(await page.locator('#drawer').isHidden());
   await page.locator('#tools [data-action="update"]').click();assert(await last()==='\x1b[983040;13u');
   await page.locator('#tools [data-action="stop"]').click();assert(await last()==='\x1b[983041;13u');
   await page.locator('#ctrl').click();await page.keyboard.press('o');assert(await last()==='\x1b[111;5:1u');assert(!(await page.locator('#ctrl').getAttribute('class')||'').includes('on'));
+  await page.evaluate(()=>hardwareKey('m',4,1));assert.strictEqual(await last(),'\x1b[109;5:1u');
+  await page.evaluate(()=>{setCtrlMComments(true);hardwareKey('m',4,1);});assert.strictEqual(await last(),'\x1b[47;5:1u');
+  await page.evaluate(()=>hardwareKey('m',5,1));assert.strictEqual(await last(),'\x1b[109;6:1u');
+  await page.locator('#ctrl').tap();await page.keyboard.press('m');assert.strictEqual(await last(),'\x1b[47;5:1u');
+  await page.evaluate(()=>{setCtrlMComments(false);hardwareKey('/',4,1);});assert.strictEqual(await last(),'\x1b[47;5:1u');
   // Fn mapped to Android Ctrl preserves exact Enter, punctuation, and release events.
   await page.evaluate(()=>{hardwareKey('Enter',4,1);hardwareKey('Enter',4,3);hardwareKey('.',4,1);hardwareKey('ArrowLeft',5,1);hardwareText('@');});
   const sequence=await input();assert(sequence.includes('\x1b[13;5:1u'));assert(sequence.includes('\x1b[13;5:3u'));assert(sequence.includes('\x1b[46;5:1u'));assert(sequence.includes('\x1b[57350;6:1u'));assert(await last()==='@');
@@ -84,6 +118,62 @@ const fs=require('fs'),path=require('path'),url=require('url'),assert=require('a
   const point=await page.evaluate(()=>{const r=term.element.querySelector('.xterm-screen').getBoundingClientRect();return {x:r.left+r.width*45.5/term.cols,y:r.top+r.height*11.5/term.rows};});
   const cdp=await page.context().newCDPSession(page);
   async function touch(type,x,y){await cdp.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'||type==='touchCancel'?[]:[{x,y,id:0,radiusX:2,radiusY:2,force:1}]});}
+  const selection=page.locator('#select-text');
+  const moreBox=await page.locator('#more').boundingBox(),selectionBox=await selection.boundingBox();
+  assert(selectionBox.x>moreBox.x&&Math.abs(selectionBox.width-moreBox.width)<1);
+  await selection.tap();assert.strictEqual(await selection.textContent(),'End selection');
+  await page.evaluate(()=>{referenceBounds=[0,0,0,0];calls.length=0;});
+  const selectionStep=await page.evaluate(()=>Math.max(12,term.element.querySelector('.xterm-screen').getBoundingClientRect().height/term.rows*3));
+  await touch('touchStart',point.x,point.y);
+  assert.strictEqual(await page.evaluate(()=>calls.filter(call=>call[0]==='input'&&call[1].startsWith('\x1b[<35;')).length),1,'Holding updates the pointer before release');
+  await touch('touchMove',point.x+selectionStep-1,point.y);
+  assert.strictEqual(await page.evaluate(()=>calls.filter(call=>call[0]==='input'&&call[1].startsWith('\x1b[<35;')).length),2,'Dragging sends movement without a click');
+  assert.deepStrictEqual(await input(),[]);
+  await touch('touchMove',point.x+selectionStep+1,point.y);
+  await touch('touchEnd');
+  assert.deepStrictEqual(await input(),['\x1b[57351;2:1u']);
+  await page.touchscreen.tap(point.x,point.y);
+  assert.match(await last(),/^\x1b\[<4;\d+;\d+M\x1b\[<4;\d+;\d+m$/);
+  await page.locator('#arrows [data-key="ArrowRight"]').tap();
+  assert.strictEqual(await last(),'\x1b[57351;2:1u');
+  await page.locator('#ctrl').tap();await page.keyboard.press('c');
+  assert.strictEqual(await last(),'\x1b[99;5:1u');
+  await selection.tap();assert.strictEqual(await selection.textContent(),'Start selection');
+  await page.locator('#arrows [data-key="ArrowRight"]').tap();
+  assert.strictEqual(await last(),'\x1b[57351;1:1u');
+  await page.evaluate(()=>{referenceBounds=[30,2,48,18];calls.length=0;});
+  await page.evaluate(()=>{term.focus();window.editorBlurCount=0;term.textarea.addEventListener('blur',()=>editorBlurCount++);});
+  for(const id of ['ctrl','alt']){
+   const button=page.locator('#'+id), box=await button.boundingBox();
+   await touch('touchStart',box.x+box.width/2,box.y+box.height/2);
+   await page.waitForTimeout(500);
+   assert(await page.evaluate(()=>document.activeElement===term.textarea));
+   await touch('touchEnd');
+   assert(await button.evaluate(el=>el.classList.contains('locked')));
+   await button.tap();
+   assert(!(await button.evaluate(el=>el.classList.contains('locked'))));
+  }
+  await page.locator('#arrows [data-key="ArrowUp"]').tap();
+  assert.strictEqual(await last(),'\x1b[57352;1:1u');
+  assert.strictEqual(await page.evaluate(()=>editorBlurCount),0,'Touch modifiers and arrows must never blur the active editor');
+  const arrow=page.locator('#arrows [data-key="ArrowDown"]'),arrowBox=await arrow.boundingBox();
+  assert.strictEqual(await arrow.evaluate(el=>getComputedStyle(el).userSelect),'none');
+  await page.evaluate(()=>calls.length=0);
+  await touch('touchStart',arrowBox.x+arrowBox.width/2,arrowBox.y+arrowBox.height/2);
+  await page.waitForTimeout(250);
+  assert.deepStrictEqual(await input(),[],'A short hold waits for the initial repeat delay');
+  await page.waitForTimeout(750);
+  const early=(await input()).length;
+  await page.waitForTimeout(1000);
+  const beforeRelease=await input();
+  assert(early>=2 && beforeRelease.length-early>early,'Held arrow repeat accelerates');
+  assert.strictEqual(beforeRelease[0],'\x1b[57353;1:1u');
+  assert(beforeRelease.slice(1).every(event=>event==='\x1b[57353;1:2u'));
+  await touch('touchEnd');
+  await page.waitForTimeout(210);
+  assert.deepStrictEqual(await input(),beforeRelease,'Release stops repeating without an extra tap');
+  assert.strictEqual(await page.evaluate(()=>editorBlurCount),0);
+  await page.evaluate(()=>calls.length=0);
   await touch('touchStart',point.x,point.y);await touch('touchMove',point.x,point.y-45);await touch('touchMove',point.x,point.y-95);await touch('touchEnd');
   let swipe=await input();assert(swipe.some(x=>x.includes('\x1b[<65;')));assert(!swipe.some(x=>x.includes('\x1b[<0;')),'Swipe must not click a row');
   await page.evaluate(()=>calls.length=0);
@@ -130,6 +220,24 @@ const fs=require('fs'),path=require('path'),url=require('url'),assert=require('a
   await touch('touchEnd');
   assert(await page.evaluate(()=>document.getElementById('term').scrollLeft)>0);assert((await input()).length===0,'Two-finger pan sends no cursor or click events');
   await page.evaluate(()=>{document.getElementById('term').scrollLeft=0;changeFontSize(10);});
+  for(const [direction,wheel] of [[-1,65],[1,64]]){
+   await page.evaluate(()=>calls.length=0);
+   await touch('touchStart',point.x,point.y);
+   await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:point.x,y:point.y,id:0},{x:point.x+30,y:point.y,id:1}]});
+   const drag=distance=>cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:point.x,y:point.y+direction*distance,id:0},{x:point.x+30,y:point.y+direction*distance,id:1}]});
+   const rowHeight=await page.evaluate(()=>term.element.querySelector('.xterm-screen').getBoundingClientRect().height/term.rows);
+   const scrolls=async()=>((await input()).join('').match(new RegExp('\\x1b\\[<'+wheel+';\\d+;\\d+M','g'))||[]).length;
+   await drag(rowHeight*0.6);
+   assert.strictEqual(await scrolls(),0);
+   await drag(rowHeight*1.2);
+   assert.strictEqual(await scrolls(),1);
+   await drag(rowHeight*11.2);
+   assert.strictEqual(await scrolls(),11,'Fast drags preserve all whole rows of travel');
+   await touch('touchEnd');
+   const events=await input();
+   assert(events.length>0&&events.every(text=>text.replaceAll(new RegExp('\\x1b\\[<'+wheel+';\\d+;\\d+M','g'),'')===''),
+    'Vertical two-finger pan sends scroll only, without a click or cursor movement');
+  }
   // Exercise sustained colored braille output with the same receive/ack bridge,
   // while checking that user input is still dispatched. Desktop test, not phone timing.
   const stress=await page.evaluate(async()=>{
