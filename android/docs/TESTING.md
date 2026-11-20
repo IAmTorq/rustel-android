@@ -39,6 +39,7 @@ and cleanup behavior before use.
 | Input | Physical and touch keyboards, modifiers, Unicode, selection, undo/redo, scrolling | Editor, Vim, find, piano-release and clipboard runners |
 | Files | Open/Import modes, cancellation, failed saves, update retention, boundary files | `document-cancel.cjs`, `import-boundary.cjs`, `import-refusal.cjs` |
 | Audio | Audible output, last-good playback, capture/export, route changes, finite samples | Audio, recording and sample-control runners |
+| USB MIDI | Port discovery, multi-channel output, repeated Play and Stop, busy port, and reconnect | USB MIDI checks below |
 | Themes and controls | Desktop-authored effects, palette changes, selection states, transparency | `phone-theme-live.cjs`, `art-space-transparency.cjs`, `resize-roundtrip.cjs` |
 | Camera and video | Permissions, framing, orientation, flipping, lifecycle, codecs, seeking | Camera and video runners |
 | Capacity | Large source, late sections, live edits, mixed effects and visualizers | [Load-test procedure](LOAD-TESTING.md) |
@@ -101,3 +102,13 @@ Qualify the actual buffer preference and route. Auto/small callbacks retain the
 upstream low-latency mode and need separate coverage; a buffered-output pass does
 not establish that path. Repeat representative source load, live edits, screen
 lifecycle and Bluetooth handoffs before declaring a release qualified.
+
+## USB MIDI regression
+
+Use a disposable QA set and a USB MIDI device. Verify that independent MIDI
+channels address separate parts on a device configured for multi-channel input.
+Repeat Play and Stop and confirm the device receives notes on each run. Hold its
+output destination open in another MIDI app if the device has an exclusive
+port. Verify that Rustel reports the open failure and remains responsive, then
+release the port and confirm playback can use it. Repeat after unplugging and
+reconnecting the device. Check Android's crash log for native MIDI aborts.

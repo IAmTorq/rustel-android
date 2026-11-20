@@ -12,11 +12,14 @@ description = "MIDI output: timed note, CC and transport messages to a hardware 
 # message planner, encoder and sender build without it, so a host that only
 # needs the wire format can leave the device stack out.
 default = ["device"]
-device = ["dep:midir"]
+device = ["dep:midir", "dep:jni-min-helper"]
 
 [dependencies]
 rustel-core = { path = "../core" }
 midir = { version = "0.11", optional = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni-min-helper = { version = "0.3", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # `access(2)` on the ALSA sequencer device before `midir` opens it.

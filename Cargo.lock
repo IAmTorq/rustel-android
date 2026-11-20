@@ -4603,6 +4603,7 @@ dependencies = [
 name = "rustel-midi"
 version = "0.1.7"
 dependencies = [
+ "jni-min-helper",
  "libc",
  "midir",
  "rustel-core",
