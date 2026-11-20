@@ -189,7 +189,7 @@ pub extern "system" fn Java_cc_rustel_android_MainActivity_nativeStart(
                 .into();
             diagnostic(
                 &folder,
-                "android.11 starting; direct event queue, Downloads Open and pattern import, app-owned output pipe, no PTY/ioctl/process-stdio replacement",
+                "android starting; direct event queue, Downloads Open and pattern import, app-owned output pipe, no PTY/ioctl/process-stdio replacement",
             );
             if !allocator::verify() {
                 return Err("Audio callback allocator failed its startup positive control".into());

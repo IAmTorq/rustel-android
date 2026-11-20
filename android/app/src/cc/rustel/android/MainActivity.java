@@ -82,7 +82,11 @@ public final class MainActivity extends Activity {
             view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
-        web = new WebView(this);
+        web = new WebView(this) {
+            @Override public boolean onKeyPreIme(int keyCode,KeyEvent event) {
+                return handleSymKey(event)||super.onKeyPreIme(keyCode,event);
+            }
+        };
         WebView.setWebContentsDebuggingEnabled((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0);
         root.addView(web, new LinearLayout.LayoutParams(-1,-1));
         setContentView(root);
@@ -247,12 +251,17 @@ public final class MainActivity extends Activity {
                 && nativeQaRun(new File(getFilesDir(),"qa-corpus").getAbsolutePath());
         }
         @JavascriptInterface public int fontSize() { return prefs.getInt("fontSize",10); }
+        @JavascriptInterface public int buttonSize() { return prefs.getInt("buttonSize",12); }
+        @JavascriptInterface public boolean symBarEnabled() { return prefs.getBoolean("symBar",false); }
         @JavascriptInterface public void ready(int cols,int rows) { runOnUiThread(()->launch(cols,rows)); }
         @JavascriptInterface public void input(String text) { send(text); }
         @JavascriptInterface public void resized(int cols,int rows) { if(started) nativeResize(cols,rows); }
         @JavascriptInterface public void ack() { acknowledgeOutput(); }
         @JavascriptInterface public String readOutput() { return pendingOutput.getAndSet(null); }
         @JavascriptInterface public void settings() { runOnUiThread(()->showSettings()); }
+        @JavascriptInterface public boolean ctrlMCommentsEnabled() {
+            return prefs.getBoolean("ctrlMComments",false);
+        }
         @JavascriptInterface public boolean touchKeyboardEnabled() {
             return prefs.getBoolean("touchKeyboard", true);
         }
@@ -322,28 +331,49 @@ public final class MainActivity extends Activity {
                 .setPositiveButton("Add folder",(d,w)->chooseSampleFolder()).setNegativeButton("Done",null).show();
         }catch(Exception error){sampleFolderError("Sample folders unavailable",error);}
     }
-    private void showSettings() {
-        LinearLayout body = new LinearLayout(this); body.setPadding(32,16,32,16); body.setOrientation(LinearLayout.VERTICAL);
+    private void addTextSizeSetting(LinearLayout body,String title,String key,int defaultSize,int max,String applyFunction) {
         TextView label = new TextView(this); label.setTextColor(Color.WHITE); body.addView(label);
-        label.setText("Text size");
+        label.setText(title);
         EditText size = new EditText(this);
         size.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         size.setSingleLine(true);size.setSelectAllOnFocus(true);
-        size.setText(Integer.toString(prefs.getInt("fontSize",10)));
-        size.setHint("8–22");body.addView(size);
-        addButton(body,"Apply text size",()->{
+        size.setText(Integer.toString(prefs.getInt(key,defaultSize)));
+        size.setHint("8–"+max);body.addView(size);
+        addButton(body,"Apply "+title.toLowerCase(java.util.Locale.ROOT),()->{
             try {
                 int value=Integer.parseInt(size.getText().toString().trim());
-                if(value<8 || value>22)throw new NumberFormatException();
-                prefs.edit().putInt("fontSize",value).apply();js("window.changeFontSize("+value+")");
+                if(value<8 || value>max)throw new NumberFormatException();
+                prefs.edit().putInt(key,value).apply();js("window."+applyFunction+"("+value+")");
                 size.setError(null);
-            }catch(NumberFormatException error){size.setError("Enter a number from 8 to 22");}
+            }catch(NumberFormatException error){size.setError("Enter a number from 8 to "+max);}
         });
+    }
+    private void showSettings() {
+        LinearLayout body = new LinearLayout(this); body.setPadding(32,16,32,16); body.setOrientation(LinearLayout.VERTICAL);
+        addTextSizeSetting(body,"Terminal text size","fontSize",10,22,"changeFontSize");
+        addTextSizeSetting(body,"Button text size","buttonSize",12,16,"changeButtonSize");
         Switch touchKeyboard = new Switch(this);
         touchKeyboard.setText("Touch keyboard");
         touchKeyboard.setChecked(prefs.getBoolean("touchKeyboard", true));
         touchKeyboard.setOnCheckedChangeListener((button, checked) -> setTouchKeyboard(checked, false));
         body.addView(touchKeyboard);
+        Switch ctrlMComments=new Switch(this);
+        ctrlMComments.setText("Ctrl+M toggles comments");
+        ctrlMComments.setChecked(prefs.getBoolean("ctrlMComments",false));
+        ctrlMComments.setOnCheckedChangeListener((button,checked)->{
+            prefs.edit().putBoolean("ctrlMComments",checked).apply();
+            js("window.setCtrlMComments("+checked+")");
+        });
+        body.addView(ctrlMComments);
+        Switch symBar=new Switch(this);
+        symBar.setText("Sym key symbol bar");
+        symBar.setChecked(prefs.getBoolean("symBar",false));
+        symBar.setOnCheckedChangeListener((button,checked)->{
+            prefs.edit().putBoolean("symBar",checked).apply();
+            js("window.setSymBarEnabled("+checked+")");
+        });
+        body.addView(symBar);
+        addButton(body,"Android controls",this::showAndroidControls);
         addButton(body,"Rustel settings",()->send("\u000f"));
         addButton(body,"Allow microphone input",()->requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},22));
         addButton(body,"Allow camera themes",()->requestPermissions(new String[]{Manifest.permission.CAMERA},23));
@@ -357,7 +387,19 @@ public final class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.addView(body);
         phoneSettings=new AlertDialog.Builder(this).setTitle("Settings").setView(scroll).setPositiveButton("Done",(d,w)->setTouchKeyboard(prefs.getBoolean("touchKeyboard", true), true)).create();
         phoneSettings.setOnDismissListener(d->phoneSettings=null);
+        phoneSettings.setOnKeyListener((dialog,key,event)->handleVolumeKey(event));
         phoneSettings.show();stylePhoneSettings();
+    }
+    private void showAndroidControls() {
+        new AlertDialog.Builder(this).setTitle("Android controls").setMessage(
+            "Tap the editor to place the cursor. Swipe with one finger to move it in any direction.\n\n"
+            +"Drag with two fingers up or down to scroll the editor one line for each line of finger travel without moving the cursor. The same gesture scrolls lists. Drag left or right to pan when the terminal is wider than the screen.\n\n"
+            +"Tap an arrow to move the cursor once, or hold it to move faster over time. Tap Ctrl or Alt to apply it to the next key, or hold to lock it. More keys shows symbols, function keys, and clipboard controls.\n\n"
+            +"Tap Start selection, then tap or drag in the editor or use the arrows to extend from the cursor. Use Ctrl+C to copy, then tap End selection to return to normal movement.\n\n"
+            +"To adjust a live slider, put the cursor on it and choose More keys → Adjust slider. Use the left and right arrows to step, or Enter to type a value.\n\n"
+            +"Enable Touch keyboard in Settings for on-screen typing. Enable Sym key symbol bar to open a small symbol row with the physical Sym key or from More keys.\n\n"
+            +"Actions lists Rustel commands and lets you switch between front and rear cameras.")
+            .setPositiveButton("Done",null).setOnKeyListener((dialog,key,event)->handleVolumeKey(event)).show();
     }
     private void applyUiTheme(String value) {
         try {
@@ -381,13 +423,26 @@ public final class MainActivity extends Activity {
         phoneSettings.getWindow().setBackgroundDrawable(new ColorDrawable(uiSurface));
         stylePhoneView(phoneSettings.getWindow().getDecorView());
     }
+    private static double contrast(int first,int second) {
+        double a=Color.luminance(first), b=Color.luminance(second);
+        return (Math.max(a,b)+0.05)/(Math.min(a,b)+0.05);
+    }
+    private static int visibleOn(int background,double minimum,int preferred,int alternative) {
+        if(contrast(background,preferred)>=minimum)return preferred;
+        if(contrast(background,alternative)>=minimum)return alternative;
+        return contrast(background,Color.WHITE)>contrast(background,Color.BLACK)?Color.WHITE:Color.BLACK;
+    }
     private void stylePhoneView(View view) {
         if(view instanceof TextView) {
-            TextView text=(TextView)view;text.setTypeface(Typeface.MONOSPACE);text.setTextColor(uiForeground);
-            if(text instanceof EditText)((EditText)text).setHintTextColor(uiMuted);
+            TextView text=(TextView)view;text.setTypeface(Typeface.MONOSPACE);
+            text.setTextColor(visibleOn(uiSurface,4.5,uiForeground,uiAccent));
+            if(text instanceof EditText)((EditText)text).setHintTextColor(visibleOn(uiBackground,4.5,uiMuted,uiForeground));
             if(text instanceof Button || text instanceof EditText) {
-                GradientDrawable fill=new GradientDrawable();fill.setColor(uiBackground);fill.setStroke((int)Math.ceil(getResources().getDisplayMetrics().density),uiRule);fill.setCornerRadius(0);text.setBackground(fill);text.setBackgroundTintList(null);
-                if(text instanceof Button){((Button)text).setAllCaps(false);text.setTextColor(uiAccent);}
+                GradientDrawable fill=new GradientDrawable();fill.setColor(uiBackground);fill.setCornerRadius(0);
+                if(text instanceof EditText)fill.setStroke((int)Math.ceil(getResources().getDisplayMetrics().density),uiRule);
+                text.setBackground(fill);text.setBackgroundTintList(null);
+                if(text instanceof Button)((Button)text).setAllCaps(false);
+                text.setTextColor(visibleOn(uiBackground,4.5,text instanceof Button?uiAccent:uiForeground,uiForeground));
             }
             if(text instanceof Switch){((Switch)text).setThumbTintList(ColorStateList.valueOf(uiAccent));((Switch)text).setTrackTintList(ColorStateList.valueOf(uiRule));}
         }
@@ -422,7 +477,33 @@ public final class MainActivity extends Activity {
         input.setOnKeyListener((view,key,event)->{status.setText("Key: "+KeyEvent.keyCodeToString(key)+"\nCtrl: "+(event.isCtrlPressed()?"yes":"no")+" · Shift: "+(event.isShiftPressed()?"yes":"no")+" · Alt: "+(event.isAltPressed()?"yes":"no")+"\nCharacter: "+KeyboardInput.name(event));return event.isCtrlPressed();});
         new AlertDialog.Builder(this).setTitle("Physical keyboard check").setView(body).setPositiveButton("Done",null).show();input.requestFocus();
     }
+    private boolean handleVolumeKey(KeyEvent event) {
+        int volumeDirection;
+        switch(event.getKeyCode()) {
+            case KeyEvent.KEYCODE_VOLUME_UP: volumeDirection=android.media.AudioManager.ADJUST_RAISE; break;
+            case KeyEvent.KEYCODE_VOLUME_DOWN: volumeDirection=android.media.AudioManager.ADJUST_LOWER; break;
+            case KeyEvent.KEYCODE_VOLUME_MUTE: volumeDirection=android.media.AudioManager.ADJUST_TOGGLE_MUTE; break;
+            default: volumeDirection=android.media.AudioManager.ADJUST_SAME; break;
+        }
+        if(volumeDirection==android.media.AudioManager.ADJUST_SAME)return false;
+        if(event.getAction()==KeyEvent.ACTION_DOWN
+                && (volumeDirection!=android.media.AudioManager.ADJUST_TOGGLE_MUTE || event.getRepeatCount()==0)) {
+            android.media.AudioManager audio=getSystemService(android.media.AudioManager.class);
+            audio.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC,volumeDirection,android.media.AudioManager.FLAG_SHOW_UI);
+        }
+        return true;
+    }
+    private boolean handleSymKey(KeyEvent event) {
+        if(!started || !terminalFocused || web==null || !web.hasWindowFocus() || !prefs.getBoolean("symBar",false))return false;
+        android.view.InputDevice device=event.getDevice();
+        boolean titanSym=event.getScanCode()==253 && device!=null && "TitanKey".equals(device.getName());
+        if(event.getKeyCode()!=KeyEvent.KEYCODE_SYM && !titanSym)return false;
+        if(event.getAction()==KeyEvent.ACTION_DOWN && event.getRepeatCount()==0)js("window.toggleSymBar()");
+        return true;
+    }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if(handleSymKey(event))return true;
+        if(handleVolumeKey(event))return true;
         if(started && terminalFocused && web!=null && web.hasWindowFocus() && event.getDeviceId()!=KeyCharacterMap.VIRTUAL_KEYBOARD
                 && (event.getAction()==KeyEvent.ACTION_DOWN || event.getAction()==KeyEvent.ACTION_UP)) {
             String name=KeyboardInput.name(event);

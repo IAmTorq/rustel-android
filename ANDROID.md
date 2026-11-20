@@ -18,7 +18,7 @@ for performance. Desktop VST plugins are not supported.
 - [Contributing](android/CONTRIBUTING.md)
 
 Android development is on `android-port`, based on upstream commit
-`c60f974b4bc4f3e1fbb79d7982089aa15451b6fe`. The original workspace, language,
+`c1e9d203f877e5f907802612511319500dfbed6d` (v0.1.7). The original workspace, language,
 DSP implementation, [coding style](CODING_STYLE.md), and
 [contribution checks](CONTRIBUTING.md) remain the reference.
 

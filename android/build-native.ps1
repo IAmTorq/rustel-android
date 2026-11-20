@@ -21,20 +21,16 @@ $env:CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS = '-C link-arg=-Wl,-z,max-page
 if (-not $env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR = Join-Path $repo 'target' }
 $env:CARGO_INCREMENTAL = '0'
 $env:CARGO_NET_GIT_FETCH_WITH_CLI = 'true'
-# The original fork URL is unavailable; the same locked commit exists here.
-$env:GIT_CONFIG_COUNT = '1'
-$env:GIT_CONFIG_KEY_0 = 'url.https://github.com/colinmarc/pulseaudio-rs.insteadOf'
-$env:GIT_CONFIG_VALUE_0 = 'https://github.com/undy-aeon/pulseaudio-rs'
-$env:BUILD_REVISION = 'c60f974b4bc4f3e1fbb79d7982089aa15451b6fe-android-port'
+$env:BUILD_REVISION = 'c1e9d203f877e5f907802612511319500dfbed6d-android-port'
 $features = @()
 if ($Qa) { $features = @('--features', 'qa') }
 $lint = @()
 if ($Command -eq 'clippy') { $lint = @('--', '-D', 'warnings') }
 if ($KeepSymbols) {
     # Apply only to the final crate, keeping dependency compilation unchanged.
-    & cargo +1.98.1 rustc --locked --manifest-path (Join-Path $repo 'Cargo.toml') --profile local --target aarch64-linux-android -p rustel-android @features -- -C strip=none
+    & cargo +1.100.0 rustc --locked --manifest-path (Join-Path $repo 'Cargo.toml') --profile local --target aarch64-linux-android -p rustel-android @features -- -C strip=none
 } else {
-    & cargo +1.98.1 $Command --locked --manifest-path (Join-Path $repo 'Cargo.toml') --profile local --target aarch64-linux-android -p rustel-android @features @lint
+    & cargo +1.100.0 $Command --locked --manifest-path (Join-Path $repo 'Cargo.toml') --profile local --target aarch64-linux-android -p rustel-android @features @lint
 }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if ($Command -eq 'build') {

@@ -10,9 +10,8 @@ impl App {
     /// ^B: the set panel, docked at the left when the terminal is wide
     /// enough and a sheet when it is not.
     ///
-    /// A plain switch: ^B shows the panel or hides it. Outside zen, Esc
-    /// gives the keyboard back and leaves the panel where it is, docked or
-    /// as a sheet. In zen the panel is a popup, and Esc closes it.
+    /// A plain switch: ^B shows the panel or hides it. Esc closes it on
+    /// Android and in zen mode; otherwise it returns focus to the score.
     pub(super) fn toggle_set_panel(&mut self) {
         if self.set_panel.is_some() {
             self.hide_set_panel();
@@ -25,7 +24,7 @@ impl App {
 
     /// Put the set panel away: ^B from inside it, and View ▸ Set panel,
     /// which is a ticked row and so turns off as readily as it turns on.
-    fn hide_set_panel(&mut self) {
+    pub(super) fn hide_set_panel(&mut self) {
         if self.set_panel.take().is_none() {
             return;
         }
@@ -241,14 +240,9 @@ impl App {
                 panel.vim_insert = false;
                 panel.refilter();
             }
-            // Zen has no docked furniture: the panel came up as a popup,
-            // not the set's file tree standing beside the score, so Esc
-            // closes it outright the way every other zen popup does -
-            // rather than merely handing the keyboard back the way it
-            // does docked, which would leave it standing with no ^B in
-            // sight to put it away again.
-            KeyCode::Esc if self.ui_settings.zen => {
+            KeyCode::Esc if self.ui_settings.zen || cfg!(target_os = "android") => {
                 self.hide_set_panel();
+                self.focus = Focus::Editor;
                 return true;
             }
             // The keyboard goes back to the score and the panel stays,
