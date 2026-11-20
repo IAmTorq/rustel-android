@@ -51,11 +51,18 @@ accepted audio revisions independently of the displayed animation.
 
 ## Known limitations and remaining work
 
+- For v0.1.7 upgrades, verify both axes of the pointer with a coordinate-driven
+  Hydra sketch and with `mousex` and `mousey` in a playing score. One-finger
+  holds and drags should report terminal coordinates while preserving editor
+  gestures. Check video picture motion separately from the decoded audio track.
+
 - Touch-IME behavior needs testing on conventional touchscreen devices.
-- External MIDI, Link/network interoperability, gamepad and serial backends
-  need additional platform or hardware coverage. Gamepad/serial parity is incomplete.
-- Shared-storage sample folders are not connected to an Android directory picker.
-  Score Open/Import does not provide that access.
+- External MIDI hardware and Link/network interoperability need device coverage.
+  The Android build does not include the gamepad or serial backends.
+- Shared-storage sample folders require a separate read-only grant in
+  [Sample folders](SAMPLES.md). Score Open/Import grants access to the selected
+  file, not its parent folder. Test provider differences and revoked grants
+  when qualifying another device.
 - Longer video, seeking, audio/video synchronization and cache pressure are not
   fully qualified. Codec support varies.
 - Full delayed-theme, context-loss, Unicode-under-load and overlapping-layout

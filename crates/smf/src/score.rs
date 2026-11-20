@@ -77,7 +77,7 @@ pub(crate) fn emit(input: &ScoreInput<'_>) -> Result<ScoreOutput, SmfError> {
         warnings.push("the timing did not fit a 64-step grid; notes were quantized".to_owned());
         (64, f64::INFINITY)
     });
-    let grid_exact = max_error <= 1e-9;
+    let mut grid_exact = max_error <= 1e-9;
     let step_ticks = bar_ticks / f64::from(steps);
 
     let mut total_steps = 0u64;
@@ -92,7 +92,11 @@ pub(crate) fn emit(input: &ScoreInput<'_>) -> Result<ScoreOutput, SmfError> {
             let end = if drums {
                 start + 1
             } else {
-                quantize(note.end, step_ticks).max(start + 1)
+                let end = quantize(note.end, step_ticks);
+                // A gate shorter than one step is lengthened to one, which
+                // an exact grid must not claim.
+                grid_exact &= end > start;
+                end.max(start + 1)
             };
             if drums && drum_name_for_note(note.note).is_none() {
                 lane_dropped += 1;
@@ -227,8 +231,13 @@ fn choose_grid(lanes: &[ScoreLane<'_>], bar_ticks: f64) -> Option<(u32, f64)> {
                 if lane.channel == 10 && drum_name_for_note(note.note).is_none() {
                     continue;
                 }
-                let position = note.start as f64 / step_ticks;
-                max_error = max_error.max((position - position.round()).abs());
+                let ticks = [note.start, note.end];
+                // Drum gates use one step, but pitched gates keep their ends.
+                let count = if lane.channel == 10 { 1 } else { 2 };
+                for tick in &ticks[..count] {
+                    let position = *tick as f64 / step_ticks;
+                    max_error = max_error.max((position - position.round()).abs());
+                }
             }
         }
         if max_error <= 0.05 {
@@ -416,6 +425,51 @@ mod tests {
         ];
         let output = emit_one(&notes, 1, None);
         assert!(output.source.contains("note(\"c4@2 d4 e4\")"));
+    }
+
+    #[test]
+    fn short_gates_choose_a_grid_that_keeps_the_note_ends() {
+        let notes = [
+            RawNote {
+                note: 60,
+                start: 0,
+                end: 120,
+            },
+            RawNote {
+                note: 62,
+                start: 480,
+                end: 720,
+            },
+        ];
+        let output = emit_one(&notes, 1, None);
+        assert_eq!(output.grid_steps_per_bar, 16);
+        assert!(output.grid_exact);
+        assert!(output.source.contains("note(\"c4 ~@3 d4@2 ~@10\")"));
+    }
+
+    #[test]
+    fn an_off_grid_note_end_is_reported_as_quantized() {
+        let notes = [RawNote {
+            note: 60,
+            start: 0,
+            end: 721,
+        }];
+        let output = emit_one(&notes, 1, None);
+        assert_eq!(output.grid_steps_per_bar, 8);
+        assert!(!output.grid_exact);
+    }
+
+    #[test]
+    fn a_gate_shorter_than_one_step_is_reported_as_quantized() {
+        let notes = [RawNote {
+            note: 60,
+            start: 0,
+            end: 0,
+        }];
+        let output = emit_one(&notes, 1, None);
+        assert!(!output.grid_exact, "the lengthened gate is not exact");
+        assert_eq!(output.grid_steps_per_bar, 4);
+        assert!(output.source.contains("c4"));
     }
 
     #[test]

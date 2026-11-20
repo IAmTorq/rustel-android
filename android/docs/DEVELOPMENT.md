@@ -100,7 +100,7 @@ for upgrades. See [BUILDING.md](BUILDING.md) for source bundles and release chec
 ## Port implementation and regression map
 
 This inventory describes the Android port relative to upstream
-`c60f974b4bc4f3e1fbb79d7982089aa15451b6fe`. It maps changes to their implementation
+`c1e9d203f877e5f907802612511319500dfbed6d` (v0.1.7). It maps changes to their implementation
 and reproducible checks. A listed check identifies relevant coverage, not a claim
 that every device or workload passes. See [TESTING.md](TESTING.md) for outstanding
 qualification and [UPSTREAM-UPDATES.md](UPSTREAM-UPDATES.md) before merging upstream.

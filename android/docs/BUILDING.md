@@ -6,7 +6,7 @@ A Linux/macOS host build has not yet been validated.
 
 ## Prerequisites
 
-- Rust 1.98.1 and `rustup target add --toolchain 1.98.1 aarch64-linux-android`.
+- Rust 1.100.0 and `rustup target add --toolchain 1.100.0 aarch64-linux-android`.
 - JDK 11, Python 3.10+, Git, Android SDK build-tools 32.0.0 and platform android-32.
 - Android NDK 23.1.7779620 (the tested toolchain), plus libclang 18.1.1 for bindgen.
 - For wrapper tests: Node.js and the pinned Playwright dependency; install its
