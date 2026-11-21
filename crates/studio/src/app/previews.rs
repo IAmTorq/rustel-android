@@ -1167,7 +1167,7 @@ fn playable_statement_start(text: &str) -> Option<usize> {
                     .find(|c: char| !c.is_ascii_alphanumeric())
                     .unwrap_or(trimmed.len());
                 let head = &trimmed[..head_end];
-                let starts = !head.is_empty() || trimmed.starts_with('(');
+                let starts = !head.is_empty() || trimmed.starts_with(['(', '"', '\'', '`']);
                 if starts
                     && !matches!(
                         head,
@@ -2833,6 +2833,47 @@ mod tests {
         fn a_parenthesised_pattern_is_labelled() {
             let text = "(s(\"bd\"))\n";
             assert_eq!(labelled_score_text(text), format!("score: {text}"));
+        }
+
+        #[cfg(feature = "hydra")]
+        #[test]
+        fn a_string_led_pattern_is_labelled_before_its_method_chain() {
+            for quote in ['"', '\'', '`'] {
+                let head = format!("{quote}hh{quote}.s()");
+                let tail = "\n.struct(binary(5))\n";
+                assert_eq!(
+                    labelled_score_text(&format!("{head}{tail}")),
+                    format!("score: {head}{tail}")
+                );
+            }
+        }
+
+        #[cfg(feature = "hydra")]
+        #[test]
+        fn a_preview_keeps_the_bundled_string_led_score_playing() {
+            use rustel_fraction::Fraction;
+            use rustel_runtime::{Session, SessionConfig};
+
+            let score = include_str!(
+                "../../../runtime/tests/e2e/scores/docs/learn-factories/binary.strudel"
+            );
+            let composite = format!("{}\n$: s(\"bd*2\")\n", labelled_score_text(score));
+            let mut session = Session::with_config(SessionConfig::default()).expect("session");
+            session.evaluate(&composite).expect("composite evaluates");
+            let haps = session
+                .query(Fraction::new(0, 1), Fraction::new(1, 1))
+                .expect("query");
+            for sound in ["hh", "bd"] {
+                assert!(
+                    haps.iter().any(|hap| {
+                        hap.value
+                            .as_object()
+                            .and_then(|value| value.get("s"))
+                            .is_some_and(|s| s.to_string().contains(sound))
+                    }),
+                    "{sound} fell silent during preview"
+                );
+            }
         }
 
         #[cfg(feature = "hydra")]

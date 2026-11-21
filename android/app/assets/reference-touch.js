@@ -55,7 +55,8 @@ window.installTerminalTouch=(term,bridge,send,move,isSelecting)=>{
     const count=Math.floor(Math.abs(pan.pending)/pan.step);
     if(count){
      const down=pan.pending>0;
-     send(mouse(down?65:64,pan.column,pan.row).repeat(count));
+     // The Android input decoder uses bit 256 for scroll-only gestures.
+     send(mouse(256+(down?65:64),pan.column,pan.row).repeat(count));
      pan.pending-=(down?1:-1)*count*pan.step;
     }
    }

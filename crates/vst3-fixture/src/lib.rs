@@ -75,11 +75,9 @@ fn library() -> PathBuf {
         std::env::consts::DLL_SUFFIX
     );
     let program = std::env::current_exe().expect("test program path");
-    let beside = program.parent().expect("test program folder").join(&name);
-    if beside.is_file() {
-        return beside;
-    }
-    newest_unit_copy(&program, &name).unwrap_or(beside)
+    // An older Cargo can leave a stale library beside a test in a reused profile.
+    newest_unit_copy(&program, &name)
+        .unwrap_or_else(|| program.parent().expect("test program folder").join(&name))
 }
 
 /// The newest copy of `name` under this crate's unit folders of the profile

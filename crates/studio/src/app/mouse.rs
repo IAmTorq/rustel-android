@@ -178,6 +178,8 @@ impl App {
 
     pub(super) fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<(), RuntimeError> {
         let (x, y) = (mouse.column, mouse.row);
+        let touch_scroll = cfg!(any(target_os = "android", test))
+            && mouse.modifiers.contains(KeyModifiers::HYPER);
         // A press begins a new gesture wherever it lands. Whatever the last
         // one held is over, even when its release never came (let go
         // outside the window, or taken by a sheet or menu on its way): its
@@ -258,7 +260,9 @@ impl App {
         if self.menu_mouse(mouse, x, y)? {
             return Ok(());
         }
-        if self.precision_slider_mouse(mouse) {
+        if (touch_scroll && self.slider_precision.is_some())
+            || (!touch_scroll && self.precision_slider_mouse(mouse))
+        {
             return Ok(());
         }
         // An open picker owns the pointer: a press acts on it or dismisses
@@ -311,7 +315,7 @@ impl App {
                     mouse.kind,
                     MouseEventKind::ScrollLeft | MouseEventKind::ScrollRight
                 );
-                if self.scroll_wheel(mouse, x, y, direction, sideways) {
+                if self.scroll_wheel(mouse, x, y, direction, sideways, touch_scroll) {
                     return Ok(());
                 }
             }
@@ -688,6 +692,7 @@ impl App {
         y: u16,
         direction: f32,
         sideways: bool,
+        touch_scroll: bool,
     ) -> bool {
         if self.scroll_log_panel(mouse, x, y) || self.scroll_theme_picker(direction) {
             return true;
@@ -695,7 +700,7 @@ impl App {
         // Over the pulse block the wheel is the preview volume's - before
         // the reference's own scrolling claims the column, exactly as the
         // press does.
-        if self.scroll_preview_volume(x, y, direction) {
+        if !touch_scroll && self.scroll_preview_volume(x, y, direction) {
             return true;
         }
         // The reference over the sheets when it was raised after them.
@@ -712,8 +717,9 @@ impl App {
             return true;
         }
         // Below the sheets: the panels, then the stage.
-        if self.scroll_mixer_panel(x, y, direction)
-            || self.scroll_mixer_fader(x, y, direction)
+        if (!touch_scroll
+            && (self.scroll_mixer_panel(x, y, direction)
+                || self.scroll_mixer_fader(x, y, direction)))
             || self.scroll_set_panel(x, y, direction)
             || self.memory_dock_at(x, y)
             || self.scroll_viz_panel(x, y, direction)
@@ -724,13 +730,15 @@ impl App {
         if self.scroll_timeline(x, y, direction, sideways) {
             return true;
         }
-        if self.volume_at(x, y).is_some() {
-            self.nudge_master_gain_db(direction * VOLUME_SCROLL_STEP_DB);
-            return true;
-        }
-        if let Some((scene, chip)) = self.slider_at(x, y) {
-            self.nudge_live_slider(scene, &chip, f64::from(direction), false);
-            return true;
+        if !touch_scroll {
+            if self.volume_at(x, y).is_some() {
+                self.nudge_master_gain_db(direction * VOLUME_SCROLL_STEP_DB);
+                return true;
+            }
+            if let Some((scene, chip)) = self.slider_at(x, y) {
+                self.nudge_live_slider(scene, &chip, f64::from(direction), false);
+                return true;
+            }
         }
         // The wheel scrolls the pane under the pointer, focused or
         // not: in a split, the other scene rolls without the caret

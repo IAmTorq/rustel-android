@@ -220,13 +220,14 @@ const fs=require('fs'),path=require('path'),url=require('url'),assert=require('a
   await touch('touchEnd');
   assert(await page.evaluate(()=>document.getElementById('term').scrollLeft)>0);assert((await input()).length===0,'Two-finger pan sends no cursor or click events');
   await page.evaluate(()=>{document.getElementById('term').scrollLeft=0;changeFontSize(10);});
-  for(const [direction,wheel] of [[-1,65],[1,64]]){
+  for(const [direction,scrollOnly] of [[-1,321],[1,320]]){
    await page.evaluate(()=>calls.length=0);
    await touch('touchStart',point.x,point.y);
    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:point.x,y:point.y,id:0},{x:point.x+30,y:point.y,id:1}]});
    const drag=distance=>cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:point.x,y:point.y+direction*distance,id:0},{x:point.x+30,y:point.y+direction*distance,id:1}]});
    const rowHeight=await page.evaluate(()=>term.element.querySelector('.xterm-screen').getBoundingClientRect().height/term.rows);
-   const scrolls=async()=>((await input()).join('').match(new RegExp('\\x1b\\[<'+wheel+';\\d+;\\d+M','g'))||[]).length;
+   const report=new RegExp('\\x1b\\[<'+scrollOnly+';\\d+;\\d+M','g');
+   const scrolls=async()=>((await input()).join('').match(report)||[]).length;
    await drag(rowHeight*0.6);
    assert.strictEqual(await scrolls(),0);
    await drag(rowHeight*1.2);
@@ -235,7 +236,7 @@ const fs=require('fs'),path=require('path'),url=require('url'),assert=require('a
    assert.strictEqual(await scrolls(),11,'Fast drags preserve all whole rows of travel');
    await touch('touchEnd');
    const events=await input();
-   assert(events.length>0&&events.every(text=>text.replaceAll(new RegExp('\\x1b\\[<'+wheel+';\\d+;\\d+M','g'),'')===''),
+   assert(events.length>0&&events.every(text=>text.replaceAll(report,'')===''),
     'Vertical two-finger pan sends scroll only, without a click or cursor movement');
   }
   // Exercise sustained colored braille output with the same receive/ack bridge,

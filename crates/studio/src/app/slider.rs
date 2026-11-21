@@ -3412,6 +3412,39 @@ mod tests {
             );
         }
 
+        #[test]
+        fn android_touch_scroll_over_a_slider_only_moves_the_viewport() {
+            let directory = tempfile::tempdir().expect("temp dir");
+            let source = format!("{SOURCE}{}", "// more score\n".repeat(80));
+            let (mut app, scene, call) = slider_app_with_source(directory.path(), &source);
+            let before = app.editor().source();
+            for armed in [None, Some((scene, call))] {
+                let (x, _, row) = lay_out(&mut app, scene, call);
+                app.armed_slider = armed;
+                let caret = app.editor().primary_selection();
+                let top = app.editor().viewport().top_row;
+                app.handle_terminal_event(Event::Mouse(MouseEvent {
+                    kind: MouseEventKind::ScrollDown,
+                    column: x + 1,
+                    row,
+                    modifiers: KeyModifiers::HYPER,
+                }))
+                .expect("touch scroll handled");
+                assert!(app.editor().viewport().top_row > top);
+                assert_eq!(app.editor().source(), before);
+                assert_eq!(app.editor().primary_selection(), caret);
+                assert_eq!(app.armed_slider, armed);
+            }
+
+            let (x, _, row) = lay_out(&mut app, scene, call);
+            mouse(&mut app, MouseEventKind::ScrollUp, x + 1, row);
+            assert_ne!(
+                app.editor().source(),
+                before,
+                "the physical wheel still adjusts"
+            );
+        }
+
         /// Typing in Vim's Insert after a slider moved is an undo step of
         /// its own. It once joined the slider's step, so `u` took the
         /// slider's value back with the typing.
