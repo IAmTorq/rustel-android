@@ -158,7 +158,13 @@ const fs=require('fs'),path=require('path'),url=require('url'),assert=require('a
   assert.strictEqual(await page.evaluate(()=>editorBlurCount),0,'Touch modifiers and arrows must never blur the active editor');
   const arrow=page.locator('#arrows [data-key="ArrowDown"]'),arrowBox=await arrow.boundingBox();
   assert.strictEqual(await arrow.evaluate(el=>getComputedStyle(el).userSelect),'none');
-  await page.evaluate(()=>calls.length=0);
+  await arrow.evaluate(el=>{
+   calls.length=0;
+   el.addEventListener('pointerup',()=>{
+    // Repeats queued while CDP is delivering the release still belong to the hold.
+    window.arrowInputsAtRelease=calls.filter(x=>x[0]==='input'&&!x[1].startsWith('\x1b[<35;')).map(x=>x[1]);
+   },{capture:true,once:true});
+  });
   await touch('touchStart',arrowBox.x+arrowBox.width/2,arrowBox.y+arrowBox.height/2);
   await page.waitForTimeout(250);
   assert.deepStrictEqual(await input(),[],'A short hold waits for the initial repeat delay');
@@ -167,11 +173,13 @@ const fs=require('fs'),path=require('path'),url=require('url'),assert=require('a
   await page.waitForTimeout(1000);
   const beforeRelease=await input();
   assert(early>=2 && beforeRelease.length-early>early,'Held arrow repeat accelerates');
-  assert.strictEqual(beforeRelease[0],'\x1b[57353;1:1u');
-  assert(beforeRelease.slice(1).every(event=>event==='\x1b[57353;1:2u'));
   await touch('touchEnd');
+  const atRelease=await page.evaluate(()=>window.arrowInputsAtRelease);
+  assert(Array.isArray(atRelease),'The arrow received pointerup');
+  assert.strictEqual(atRelease[0],'\x1b[57353;1:1u');
+  assert(atRelease.slice(1).every(event=>event==='\x1b[57353;1:2u'));
   await page.waitForTimeout(210);
-  assert.deepStrictEqual(await input(),beforeRelease,'Release stops repeating without an extra tap');
+  assert.deepStrictEqual(await input(),atRelease,'Release stops repeating without an extra tap');
   assert.strictEqual(await page.evaluate(()=>editorBlurCount),0);
   await page.evaluate(()=>calls.length=0);
   await touch('touchStart',point.x,point.y);await touch('touchMove',point.x,point.y-45);await touch('touchMove',point.x,point.y-95);await touch('touchEnd');

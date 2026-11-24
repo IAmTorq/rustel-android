@@ -178,8 +178,8 @@ impl App {
 
     pub(super) fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<(), RuntimeError> {
         let (x, y) = (mouse.column, mouse.row);
-        let touch_scroll = cfg!(any(target_os = "android", test))
-            && mouse.modifiers.contains(KeyModifiers::HYPER);
+        let touch_scroll =
+            cfg!(any(target_os = "android", test)) && mouse.modifiers.contains(KeyModifiers::HYPER);
         // A press begins a new gesture wherever it lands. Whatever the last
         // one held is over, even when its release never came (let go
         // outside the window, or taken by a sheet or menu on its way): its
