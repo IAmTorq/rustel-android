@@ -241,11 +241,17 @@ fn csi(sequence: &str) -> Option<Event> {
         let mask = ((flags & 4 != 0) as u32)
             | (((flags & 8 != 0) as u32) << 1)
             | (((flags & 16 != 0) as u32) << 2);
+        // The WebView adds bit 256 to vertical two-finger scroll reports.
+        // Keep them distinguishable from a physical wheel through Crossterm.
+        let mut modifiers = modifiers(mask);
+        if final_byte == 'M' && matches!(flags, 320 | 321) {
+            modifiers |= KeyModifiers::HYPER;
+        }
         return Some(Event::Mouse(MouseEvent {
             kind,
             column: values[1].saturating_sub(1),
             row: values[2].saturating_sub(1),
-            modifiers: modifiers(mask),
+            modifiers,
         }));
     }
     if sequence == "I" {
@@ -378,6 +384,27 @@ pub fn send(bytes: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn touch_scroll_is_distinct_from_a_mouse_wheel() {
+        for (flags, kind, modifiers) in [
+            (320, MouseEventKind::ScrollUp, KeyModifiers::HYPER),
+            (321, MouseEventKind::ScrollDown, KeyModifiers::HYPER),
+            (64, MouseEventKind::ScrollUp, KeyModifiers::NONE),
+            (65, MouseEventKind::ScrollDown, KeyModifiers::NONE),
+        ] {
+            assert_eq!(
+                csi(&format!("<{flags};41;3M")),
+                Some(Event::Mouse(MouseEvent {
+                    kind,
+                    column: 40,
+                    row: 2,
+                    modifiers,
+                }))
+            );
+        }
+    }
+
     #[test]
     fn shifted_tabs_match_desktop_backtab_events() {
         for (sequence, expected_modifiers) in [

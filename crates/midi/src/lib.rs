@@ -36,6 +36,57 @@ use std::time::{Duration, Instant};
 #[cfg(feature = "device")]
 use midir::{MidiOutput, MidiOutputConnection};
 
+#[cfg(feature = "device")]
+fn with_midi_jvm<T>(operation: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    // midir calls AMidiDevice_release on a failed port open and on explicit
+    // close. Android requires the calling thread to be attached in both cases.
+    #[cfg(target_os = "android")]
+    return jni_min_helper::jni_with_env(|_| Ok(operation()))
+        .map_err(|error| format!("could not attach Android MIDI thread: {error}"))?;
+
+    #[cfg(not(target_os = "android"))]
+    operation()
+}
+
+#[cfg(all(feature = "device", target_os = "android"))]
+struct AndroidMidiConnection<T> {
+    connection: Option<T>,
+    close: fn(T),
+}
+
+#[cfg(all(feature = "device", target_os = "android"))]
+impl<T> AndroidMidiConnection<T> {
+    fn new(connection: T, close: fn(T)) -> Self {
+        Self {
+            connection: Some(connection),
+            close,
+        }
+    }
+}
+
+#[cfg(all(feature = "device", target_os = "android"))]
+impl<T> Drop for AndroidMidiConnection<T> {
+    fn drop(&mut self) {
+        // Android midir leaves the AMidi handles open on ordinary drop.
+        if let Err(error) = with_midi_jvm(|| {
+            if let Some(connection) = self.connection.take() {
+                (self.close)(connection);
+            }
+            Ok(())
+        }) {
+            eprintln!("{error}");
+        }
+    }
+}
+
+#[cfg(all(feature = "device", target_os = "android"))]
+impl MidiPort for AndroidMidiConnection<MidiOutputConnection> {
+    fn send(&mut self, bytes: &[u8]) -> Result<(), String> {
+        let connection = self.connection.as_mut().ok_or("MIDI port is closed")?;
+        MidiPort::send(connection, bytes)
+    }
+}
+
 /// What to say when there is no sequencer to ask.
 #[cfg(all(feature = "device", target_os = "linux"))]
 pub(crate) const NO_SEQUENCER: &str =
@@ -831,9 +882,15 @@ impl MidiSender {
         let index = resolve_port(selector, &names, "MIDI port")?;
         let port = &ports[index];
         let port_name = names[index].clone();
-        let connection = output
-            .connect(port, "rustel-out")
-            .map_err(|error| format!("could not open MIDI port \"{port_name}\": {error}"))?;
+        let connection = with_midi_jvm(|| {
+            output
+                .connect(port, "rustel-out")
+                .map_err(|error| format!("could not open MIDI port \"{port_name}\": {error}"))
+        })?;
+        #[cfg(target_os = "android")]
+        let connection = AndroidMidiConnection::new(connection, |connection| {
+            connection.close();
+        });
 
         Self::try_with_port(Box::new(connection), port_name)
     }

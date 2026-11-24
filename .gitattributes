@@ -10,6 +10,8 @@ crates/runtime/tests/e2e/scores/** whitespace=-trailing-space,-blank-at-eof
 # it lands. The ASCII art it once sat beside moved to rustel-studio-themes,
 # whose own attributes keep those files byte-exact.
 crates/studio/src/themes/** text eol=lf
+# The vendored logo renderer indexes its ASCII rows by byte offset.
+android-native/vendor/rustel-studio-themes/themes/rustel-logo.txt text eol=lf
 
 # The studio e2e suite compares its goldens as text; the comparison also
 # normalises CRLF itself, so a checkout with eol rewriting stays correct.

@@ -957,6 +957,17 @@ impl App {
             self.close_panel(kind);
             return Ok(true);
         }
+        #[cfg(target_os = "android")]
+        if key.code == KeyCode::Esc
+            && key.modifiers.is_empty()
+            && key.kind == KeyEventKind::Press
+            && self.focus == Focus::Editor
+            && self.set_panel.is_some()
+            && !self.regions.sidebar_hidden
+        {
+            self.hide_set_panel();
+            return Ok(true);
+        }
         match super::vim::handle_text_key(self, key) {
             super::vim::VimTextKey::Ignored => {}
             super::vim::VimTextKey::Consumed => return Ok(true),
@@ -1543,10 +1554,7 @@ impl App {
         }
         // Alt+↑/↓ nudge the slider under the caret, the one control a
         // score offers that is not text.
-        if self.nudge_slider_key(key) {
-            return true;
-        }
-        false
+        self.nudge_slider_key(key)
     }
 
     /// A held key, for whatever took its press: an armed slider, the
@@ -1632,10 +1640,7 @@ impl App {
         }
         // A repeat keeps the same modified-arrow meaning as its press;
         // otherwise held Option+arrows fall through to caret navigation.
-        if self.nudge_slider_key(key) {
-            return Ok(true);
-        }
-        Ok(false)
+        Ok(self.nudge_slider_key(key))
     }
 
     /// A paste: to the text field that owns it, to the drop its path

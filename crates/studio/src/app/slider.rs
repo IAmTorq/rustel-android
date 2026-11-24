@@ -505,16 +505,20 @@ impl App {
         if let Some((scene, chip)) = self.slider_at(x, y)
             && let Some((track_x, width)) = self.slider_pill_track(scene, &chip)
         {
-            let track = SliderTrack { x: track_x, width };
-            // Capture before rewriting the literal: the edit
-            // invalidates the map, including during this batch.
-            self.pointer = Some(Pointer::Slider {
-                scene,
-                call_from: chip.call.start,
-                track,
-            });
-            self.drag_slider(scene, chip.call.start, track, x);
-            self.armed_slider = Some((scene, chip.call.start));
+            let target = (scene, chip.call.start);
+            let adjust = !cfg!(target_os = "android") || self.armed_slider == Some(target);
+            if adjust {
+                let track = SliderTrack { x: track_x, width };
+                // Capture before rewriting the literal: the edit
+                // invalidates the map, including during this batch.
+                self.pointer = Some(Pointer::Slider {
+                    scene,
+                    call_from: chip.call.start,
+                    track,
+                });
+                self.drag_slider(scene, chip.call.start, track, x);
+            }
+            self.armed_slider = Some(target);
             // The pill is the score's: a click on it takes the
             // keyboard back from whatever panel had it, or the
             // panel keeps the arrows and the control never steps.
@@ -3405,6 +3409,39 @@ mod tests {
                 value(&app, scene, call + 1),
                 clicked,
                 "← left the slider be"
+            );
+        }
+
+        #[test]
+        fn android_touch_scroll_over_a_slider_only_moves_the_viewport() {
+            let directory = tempfile::tempdir().expect("temp dir");
+            let source = format!("{SOURCE}{}", "// more score\n".repeat(80));
+            let (mut app, scene, call) = slider_app_with_source(directory.path(), &source);
+            let before = app.editor().source();
+            for armed in [None, Some((scene, call))] {
+                let (x, _, row) = lay_out(&mut app, scene, call);
+                app.armed_slider = armed;
+                let caret = app.editor().primary_selection();
+                let top = app.editor().viewport().top_row;
+                app.handle_terminal_event(Event::Mouse(MouseEvent {
+                    kind: MouseEventKind::ScrollDown,
+                    column: x + 1,
+                    row,
+                    modifiers: KeyModifiers::HYPER,
+                }))
+                .expect("touch scroll handled");
+                assert!(app.editor().viewport().top_row > top);
+                assert_eq!(app.editor().source(), before);
+                assert_eq!(app.editor().primary_selection(), caret);
+                assert_eq!(app.armed_slider, armed);
+            }
+
+            let (x, _, row) = lay_out(&mut app, scene, call);
+            mouse(&mut app, MouseEventKind::ScrollUp, x + 1, row);
+            assert_ne!(
+                app.editor().source(),
+                before,
+                "the physical wheel still adjusts"
             );
         }
 

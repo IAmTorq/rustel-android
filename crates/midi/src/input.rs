@@ -201,7 +201,10 @@ pub fn note_name(note: u8) -> String {
 /// Holding this alive is what keeps the connection open; dropping it closes the
 /// port. The callback runs on the DRIVER's thread, so it must not block.
 pub struct MidiListener {
+    #[cfg(not(target_os = "android"))]
     _connection: MidiInputConnection<()>,
+    #[cfg(target_os = "android")]
+    _connection: crate::AndroidMidiConnection<MidiInputConnection<()>>,
     port_name: String,
 }
 
@@ -276,18 +279,24 @@ impl MidiListener {
         let index = crate::resolve_port(selector, &names, "MIDI input")?;
         let port = &ports[index];
         let port_name = names[index].clone();
-        let connection = input
-            .connect(
-                port,
-                "rustel-in",
-                move |micros, bytes, _| {
-                    if let Some(event) = dispatch(bytes, pass_raw) {
-                        on_message(micros, event, bytes);
-                    }
-                },
-                (),
-            )
-            .map_err(|error| format!("could not open MIDI input \"{port_name}\": {error}"))?;
+        let connection = crate::with_midi_jvm(|| {
+            input
+                .connect(
+                    port,
+                    "rustel-in",
+                    move |micros, bytes, _| {
+                        if let Some(event) = dispatch(bytes, pass_raw) {
+                            on_message(micros, event, bytes);
+                        }
+                    },
+                    (),
+                )
+                .map_err(|error| format!("could not open MIDI input \"{port_name}\": {error}"))
+        })?;
+        #[cfg(target_os = "android")]
+        let connection = crate::AndroidMidiConnection::new(connection, |connection| {
+            connection.close();
+        });
         Ok(Self {
             _connection: connection,
             port_name,

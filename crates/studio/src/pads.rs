@@ -8,7 +8,7 @@
 //! The mapping lives in the set's project file, so it travels with the
 //! folder and follows a scene through renames.
 
-use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
+use std::sync::mpsc::TryRecvError;
 
 use rustel_midi::input::{MidiEvent, MidiListener};
 use serde::{Deserialize, Serialize};
@@ -52,16 +52,64 @@ pub struct CcTurn {
     pub value: u8,
 }
 
-/// Every MIDI input on the machine, funnelled into one channel the draw
-/// loop drains. The driver's threads only ever push into it.
+/// How many pad presses wait for the UI. Past this, the oldest press
+/// leaves and the newest stay. A busy frame then launches the hits that
+/// just arrived, and the ones from the start of the hitch are gone.
+const PRESS_QUEUE: usize = 32;
+
+/// How many controller messages wait. Relative knobs and buttons need
+/// every message in order. A full queue drops the oldest message.
+const CC_QUEUE: usize = 32;
+
+/// A bounded queue shared by the MIDI callback and the UI thread.
+///
+/// The callback only tries the lock. A busy UI drops that one message
+/// and the callback returns. The UI holds the lock to pop one event.
+struct MidiQueue<T> {
+    events: std::sync::Mutex<std::collections::VecDeque<T>>,
+    capacity: usize,
+}
+
+impl<T> MidiQueue<T> {
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            events: std::sync::Mutex::new(std::collections::VecDeque::with_capacity(capacity)),
+            capacity,
+        }
+    }
+
+    /// Keep `value`. The oldest event leaves once the queue is full.
+    fn append(&self, value: T) {
+        let Ok(mut events) = self.events.try_lock() else {
+            return;
+        };
+        enqueue(&mut events, self.capacity, value);
+    }
+
+    fn try_recv(&self) -> Result<T, TryRecvError> {
+        self.events
+            .lock()
+            .expect("midi queue poisoned")
+            .pop_front()
+            .ok_or(TryRecvError::Empty)
+    }
+}
+
+fn enqueue<T>(events: &mut std::collections::VecDeque<T>, capacity: usize, value: T) {
+    if events.len() == capacity {
+        events.pop_front();
+    }
+    events.push_back(value);
+}
+
+/// Every MIDI input on the machine, funnelled into two bounded queues the
+/// draw loop drains. The driver's threads only ever push into them.
 pub struct PadListener {
     listeners: Vec<MidiListener>,
     ports: Vec<String>,
-    presses: Receiver<PadPress>,
-    sender: Sender<PadPress>,
-    /// The knobs, on their own channel: a slider follows them.
-    turns: Receiver<CcTurn>,
-    turn_sender: Sender<CcTurn>,
+    presses: std::sync::Arc<MidiQueue<PadPress>>,
+    /// Controller messages, in order on their own bounded queue.
+    turns: std::sync::Arc<MidiQueue<CcTurn>>,
     /// When any message last arrived on any port, in milliseconds since
     /// the UNIX epoch: an activity light, stamped on the driver's thread
     /// with a store and nothing else.
@@ -208,15 +256,11 @@ fn unix_millis() -> u64 {
 
 impl Default for PadListener {
     fn default() -> Self {
-        let (sender, presses) = channel();
-        let (turn_sender, turns) = channel();
         Self {
             listeners: Vec::new(),
             ports: Vec::new(),
-            presses,
-            sender,
-            turns,
-            turn_sender,
+            presses: std::sync::Arc::new(MidiQueue::with_capacity(PRESS_QUEUE)),
+            turns: std::sync::Arc::new(MidiQueue::with_capacity(CC_QUEUE)),
             last_message: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             recent: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::VecDeque::with_capacity(RECENT_MESSAGES),
@@ -235,8 +279,8 @@ impl Default for PadListener {
 /// the state it stamps. Every port shares the same handles, so the mirror
 /// gate sees presses from all of them.
 struct DriverShared {
-    presses: Sender<PadPress>,
-    turns: Sender<CcTurn>,
+    presses: std::sync::Arc<MidiQueue<PadPress>>,
+    turns: std::sync::Arc<MidiQueue<CcTurn>>,
     last_message: std::sync::Arc<std::sync::atomic::AtomicU64>,
     recent: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<String>>>,
     recent_generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
@@ -287,7 +331,7 @@ fn on_driver_message(
                 .lock()
                 .is_ok_and(|mut gate| gate.is_mirror(Pad { note, channel }, true, gate_now));
             if !mirror {
-                let _ = shared.presses.send(PadPress {
+                shared.presses.append(PadPress {
                     note,
                     channel,
                     velocity,
@@ -299,7 +343,7 @@ fn on_driver_message(
             controller,
             value,
         } => {
-            let _ = shared.turns.send(CcTurn {
+            shared.turns.append(CcTurn {
                 controller,
                 channel,
                 value,
@@ -323,7 +367,7 @@ fn on_driver_message(
                 .lock()
                 .is_ok_and(|mut gate| gate.is_mirror(Pad { note, channel }, false, gate_now));
             if !mirror {
-                let _ = shared.presses.send(PadPress {
+                shared.presses.append(PadPress {
                     note,
                     channel,
                     velocity: 0,
@@ -337,8 +381,8 @@ fn on_driver_message(
 impl PadListener {
     fn driver_shared(&self) -> DriverShared {
         DriverShared {
-            presses: self.sender.clone(),
-            turns: self.turn_sender.clone(),
+            presses: std::sync::Arc::clone(&self.presses),
+            turns: std::sync::Arc::clone(&self.turns),
             last_message: std::sync::Arc::clone(&self.last_message),
             recent: std::sync::Arc::clone(&self.recent),
             recent_generation: std::sync::Arc::clone(&self.recent_generation),
@@ -459,7 +503,7 @@ impl PadListener {
     /// TEST. A knob turned, as the driver would report it.
     #[cfg(test)]
     pub fn turn_for_test(&self, turn: CcTurn) {
-        let _ = self.turn_sender.send(turn);
+        self.turns.append(turn);
     }
 
     /// HARNESS. Plug a virtual controller in, as a USB pad appearing at a
@@ -642,6 +686,53 @@ mod tests {
         );
         assert!(listener.active_within(60_000));
         assert!(listener.try_recv().is_err(), "a knob is not a pad");
+    }
+
+    /// A burst keeps the newest messages in order, within each queue's cap.
+    #[test]
+    fn a_burst_keeps_the_newest_presses_and_controller_messages() {
+        let listener = PadListener::default();
+        for note in 0..64u8 {
+            listener.driver_message_for_test("pads", note_on(note), u64::from(note) * 100);
+        }
+        assert_eq!(
+            delivered(&listener),
+            (64 - PRESS_QUEUE as u8..64).collect::<Vec<_>>()
+        );
+        for value in 0..100u8 {
+            listener.driver_message_for_test(
+                "knobs",
+                MidiEvent::ControlChange {
+                    channel: 1,
+                    controller: 7,
+                    value,
+                },
+                0,
+            );
+        }
+        listener.driver_message_for_test(
+            "knobs",
+            MidiEvent::ControlChange {
+                channel: 1,
+                controller: 1,
+                value: 10,
+            },
+            0,
+        );
+        let turns: Vec<CcTurn> = std::iter::from_fn(|| listener.try_recv_cc().ok()).collect();
+        let expected: Vec<CcTurn> = (101 - CC_QUEUE as u8..100)
+            .map(|value| CcTurn {
+                controller: 7,
+                channel: 1,
+                value,
+            })
+            .chain([CcTurn {
+                controller: 1,
+                channel: 1,
+                value: 10,
+            }])
+            .collect();
+        assert_eq!(turns, expected);
     }
 
     /// The gate's memory is bounded and the oldest slot is the one reused:

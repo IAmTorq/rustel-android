@@ -39,6 +39,7 @@ and cleanup behavior before use.
 | Input | Physical and touch keyboards, modifiers, Unicode, selection, undo/redo, scrolling | Editor, Vim, find, piano-release and clipboard runners |
 | Files | Open/Import modes, cancellation, failed saves, update retention, boundary files | `document-cancel.cjs`, `import-boundary.cjs`, `import-refusal.cjs` |
 | Audio | Audible output, last-good playback, capture/export, route changes, finite samples | Audio, recording and sample-control runners |
+| USB MIDI | Port discovery, multi-channel output, repeated Play and Stop, busy port, and reconnect | USB MIDI checks below |
 | Themes and controls | Desktop-authored effects, palette changes, selection states, transparency | `phone-theme-live.cjs`, `art-space-transparency.cjs`, `resize-roundtrip.cjs` |
 | Camera and video | Permissions, framing, orientation, flipping, lifecycle, codecs, seeking | Camera and video runners |
 | Capacity | Large source, late sections, live edits, mixed effects and visualizers | [Load-test procedure](LOAD-TESTING.md) |
@@ -51,11 +52,18 @@ accepted audio revisions independently of the displayed animation.
 
 ## Known limitations and remaining work
 
+- For v0.1.7 upgrades, verify both axes of the pointer with a coordinate-driven
+  Hydra sketch and with `mousex` and `mousey` in a playing score. One-finger
+  holds and drags should report terminal coordinates while preserving editor
+  gestures. Check video picture motion separately from the decoded audio track.
+
 - Touch-IME behavior needs testing on conventional touchscreen devices.
-- External MIDI, Link/network interoperability, gamepad and serial backends
-  need additional platform or hardware coverage. Gamepad/serial parity is incomplete.
-- Shared-storage sample folders are not connected to an Android directory picker.
-  Score Open/Import does not provide that access.
+- External MIDI hardware and Link/network interoperability need device coverage.
+  The Android build does not include the gamepad or serial backends.
+- Shared-storage sample folders require a separate read-only grant in
+  [Sample folders](SAMPLES.md). Score Open/Import grants access to the selected
+  file, not its parent folder. Test provider differences and revoked grants
+  when qualifying another device.
 - Longer video, seeking, audio/video synchronization and cache pressure are not
   fully qualified. Codec support varies.
 - Full delayed-theme, context-loss, Unicode-under-load and overlapping-layout
@@ -94,3 +102,13 @@ Qualify the actual buffer preference and route. Auto/small callbacks retain the
 upstream low-latency mode and need separate coverage; a buffered-output pass does
 not establish that path. Repeat representative source load, live edits, screen
 lifecycle and Bluetooth handoffs before declaring a release qualified.
+
+## USB MIDI regression
+
+Use a disposable QA set and a USB MIDI device. Verify that independent MIDI
+channels address separate parts on a device configured for multi-channel input.
+Repeat Play and Stop and confirm the device receives notes on each run. Hold its
+output destination open in another MIDI app if the device has an exclusive
+port. Verify that Rustel reports the open failure and remains responsive, then
+release the port and confirm playback can use it. Repeat after unplugging and
+reconnecting the device. Check Android's crash log for native MIDI aborts.

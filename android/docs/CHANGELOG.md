@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Integrate Rustel v0.1.7, retaining the Android host and local platform fixes.
+  Build with the upstream Rust 1.100.0 toolchain.
+
 - Add persisted sample-folder access through Android's directory picker, including
   subfolders, reusable sample-map aliases, indexed arrays and note-mapped banks.
   Read files on demand and support refresh and access removal.
